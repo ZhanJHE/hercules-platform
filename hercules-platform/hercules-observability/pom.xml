@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.zhanjh</groupId>
+		<artifactId>hercules-platform</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+	<artifactId>hercules-observability</artifactId>
+	<name>hercules-observability</name>
+	<description>可观测性模块：健康度计算、大盘数据聚合（阶段 F 填充；指标由各模块自带 Micrometer 暴露）</description>
+</project>

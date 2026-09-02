@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.zhanjh</groupId>
+		<artifactId>hercules-platform</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+	<artifactId>hercules-rag</artifactId>
+	<name>hercules-rag</name>
+	<description>RAG 检索增强模块：文本分块、向量化、Milvus/Neo4j 检索与重排（阶段 E 填充）</description>
+</project>

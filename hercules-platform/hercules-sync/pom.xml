@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.zhanjh</groupId>
+		<artifactId>hercules-platform</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+	<artifactId>hercules-sync</artifactId>
+	<name>hercules-sync</name>
+	<description>数据同步模块：向量时钟、版本变更生产者/消费者、字段级 LWW 冲突合并（Sprint 2 接入 Canal+RocketMQ 适配器）</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>com.zhanjh</groupId>
+			<artifactId>hercules-cache</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.zhanjh</groupId>
+			<artifactId>hercules-common</artifactId>
+		</dependency>
+		<!-- @TransactionalEventListener 所在构件 -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-tx</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+</project>

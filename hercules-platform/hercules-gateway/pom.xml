@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.zhanjh</groupId>
+		<artifactId>hercules-platform</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+	<artifactId>hercules-gateway</artifactId>
+	<name>hercules-gateway</name>
+	<description>API 网关（独立进程）：Spring Cloud Gateway 路由 / JWT 鉴权 / Redis 限流（阶段 H 填充）</description>
+
+	<!-- 阶段 H 启用：Spring Cloud BOM（Gateway 为 WebFlux 独立进程，不与其他模块发生编译依赖）
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+	-->
+</project>

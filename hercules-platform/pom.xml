@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.5.16</version>
+		<relativePath/>
+	</parent>
+	<groupId>com.zhanjh</groupId>
+	<artifactId>hercules-platform</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>hercules-platform</name>
+	<description>智慧校园多智能体服务平台 —— 分布式缓存一致性治理 + 多智能体（Maven 多模块父工程）</description>
+
+	<modules>
+		<module>hercules-common</module>
+		<module>hercules-cache</module>
+		<module>hercules-sync</module>
+		<module>hercules-inspector</module>
+		<module>hercules-rag</module>
+		<module>hercules-agent</module>
+		<module>hercules-observability</module>
+		<module>hercules-admin</module>
+		<module>hercules-application</module>
+		<module>hercules-gateway</module>
+	</modules>
+
+	<properties>
+		<java.version>21</java.version>
+		<mybatis-plus.version>3.5.17</mybatis-plus.version>
+		<spring-cloud.version>2025.0.1</spring-cloud.version>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>com.baomidou</groupId>
+				<artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+				<version>${mybatis-plus.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.baomidou</groupId>
+				<artifactId>mybatis-plus-jsqlparser</artifactId>
+				<version>${mybatis-plus.version}</version>
+			</dependency>
+			<!-- 平台内部模块：统一版本引用 -->
+			<dependency>
+				<groupId>com.zhanjh</groupId>
+				<artifactId>hercules-common</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.zhanjh</groupId>
+				<artifactId>hercules-cache</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.zhanjh</groupId>
+				<artifactId>hercules-sync</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.zhanjh</groupId>
+				<artifactId>hercules-inspector</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.zhanjh</groupId>
+				<artifactId>hercules-rag</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.zhanjh</groupId>
+				<artifactId>hercules-agent</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.zhanjh</groupId>
+				<artifactId>hercules-observability</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.zhanjh</groupId>
+				<artifactId>hercules-admin</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<configuration>
+						<parameters>true</parameters>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
+</project>

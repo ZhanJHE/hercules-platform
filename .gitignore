@@ -1,0 +1,26 @@
+# --- 构建产物 ---
+**/target/
+*.class
+
+# --- 前端（阶段 G） ---
+**/node_modules/
+**/dist/
+
+# --- 日志与运行时产物 ---
+*.log
+*.pid
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# --- 本机私有配置（真实凭据，勿提交） ---
+application-local.yml
+
+# --- OS ---
+Thumbs.db
+.DS_Store
