@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: hercules
+  profiles:
+    active: local
+  sql:
+    init:
+      mode: always
+
+server:
+  port: 8080
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+# ===== Hercules MVP 配置 =====
+# 延后接入的中间件占位（Sprint 2+）：
+# canal:      Canal 监听 MySQL Binlog（实现 VersionChangeProducer 接口后替换进程内总线）
+# rocketmq:   顺序消息队列（替换 InProcessEventBusProducer）
+# milvus/neo4j: RAG 检索（Sprint 5-6）
+hercules:
+  sync:
+    node-id: node-1        # 本节点标识，用于向量时钟
+    max-nodes: 10          # 向量时钟最大节点数（超限告警，对应风险 R-03）
+  cache:
+    local-ttl: 60s         # Caffeine L1 固定 TTL
+    remote-ttl: 300s       # Redis L2 详情键 TTL
+    list-ttl: 10s          # 列表键 TTL（最终一致窗口）
+    local-max-size: 1000
+    list-key-prefix: "course:list:"
