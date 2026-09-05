@@ -5,3 +5,8 @@ spring:
     driver-class-name: org.h2.Driver
     username: sa
     password: ""
+
+# 测试专用 JWT 密钥（仅 H2 冒烟/认证流测试使用）
+hercules:
+  auth:
+    secret: "test-only-secret-for-hercules-jwt-signing-0123456789abcdef"

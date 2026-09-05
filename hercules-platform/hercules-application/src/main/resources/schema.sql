@@ -63,3 +63,16 @@ CREATE TABLE IF NOT EXISTS t_agent_trace (
     status          TINYINT,
     create_time     DATETIME(3) NOT NULL
 );
+
+-- 认证用户表（阶段 A+ 新增，起步文档 §5 设计增补）
+-- 种子账号由应用启动器（AuthUserSeeder）幂等写入（BCrypt 密文启动时生成，避免静态弱密文）
+CREATE TABLE IF NOT EXISTS t_user (
+    id          BIGINT PRIMARY KEY AUTO_INCREMENT,
+    username    VARCHAR(50)  NOT NULL,
+    password    VARCHAR(60)  NOT NULL,          -- BCrypt（强度 10）
+    role        VARCHAR(20)  NOT NULL,          -- STUDENT / ADMIN
+    student_id  BIGINT,                         -- 学生业务号（选课用）；管理员为 NULL
+    status      TINYINT      NOT NULL DEFAULT 1,-- 1 启用 0 停用
+    create_time DATETIME(3)  NOT NULL,
+    CONSTRAINT uk_user_username UNIQUE (username)
+);

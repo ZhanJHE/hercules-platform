@@ -26,6 +26,7 @@ Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层
 - 🗂 **多级缓存**：Caffeine（L1）→ Redis（L2）→ MySQL 的 cache-aside 读路径，逐级回填，命中率统计；
 - 🕰 **向量时钟冲突消解**：每次缓存变更携带向量时钟，消费者判定「新版本应用 / 旧版本幂等丢弃 / 并发冲突字段级 LWW 合并」，版本持久化于 `t_cache_version`；
 - 🔒 **防超选选课**：条件 `UPDATE ... WHERE enrolled < capacity` 原子扣减 + 事务提交后（AFTER_COMMIT）同步刷新缓存，先提交、后同步；
+- 🔐 **双 Token 认证**：JWT（30min，jjwt 0.13.0）+ Refresh Token（7d，Redis 旋转式刷新），登出 jti 黑名单，BCrypt 密码，水平越权收敛（studentId 取自 token），应用内鉴权（阶段 H 迁网关统一验签）；
 - 🧪 **可测试性**：单元测试不依赖外部中间件（H2 内存库 + 内存桩 L2），端到端冒烟覆盖完整链路；
 - 📊 **可观测**：Micrometer 指标族（`hercules_cache_*` / `hercules_sync_*`）经 `/actuator/prometheus` 暴露，自定义命中率统计接口；
 - 🎬 **答辩演示钩子**：`simulate-conflict` 一键模拟双节点并发写冲突、`evict-local` 演示 L1 失效后 L2 回填；
@@ -44,6 +45,7 @@ Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层
 | 缓存 L2 | Redis + Lettuce | 服务端 7.x / 客户端 6.6 | 分布式缓存（仅用 GET/SET EX/DEL 基础命令） |
 | 指标 | Micrometer | 1.15.x（+ prometheus registry） | 计数器 / Prometheus 端点 |
 | 高可用 | Resilience4j | 2.4.0 | Redis 熔断降级装饰器（OPEN 时读直连 DB，快速失败） |
+| 认证 | Spring Security + jjwt | 6.5 / 0.13.0 | 双 Token（JWT + Refresh）、BCrypt、jti 黑名单 |
 | 测试 | JUnit 5 + Mockito + AssertJ + MockMvc | Boot BOM 管理 | 单元 / 集成 / 端到端冒烟 |
 | 测试数据库 | H2 | 2.3.x（test scope） | MySQL 兼容模式内存库 |
 | 同步链传输（规划） | Canal + RocketMQ | 1.1.7 / 4.9 | Sprint 2 替换进程内事件总线 |
@@ -112,14 +114,20 @@ java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
 
 | Method | Path | 说明 |
 | :--- | :--- | :--- |
-| GET | `/api/v1/courses?page=&size=&keyword=` | 课程分页 / 关键字检索（走多级缓存） |
+| POST | `/api/v1/auth/login` | 登录（用户名密码 → 双 Token） |
+| POST | `/api/v1/auth/refresh` | 刷新（旋转式换新 Token 对，白名单） |
+| POST | `/api/v1/auth/logout` | 登出（jti 入黑名单 + 吊销 refresh） |
+| GET | `/api/v1/courses?page=&size=&keyword=` | 课程分页 / 关键字检索（多级缓存，需登录） |
 | GET | `/api/v1/courses/{id}` | 课程详情（纳入向量时钟版本链） |
-| POST | `/api/v1/enrollment` | 选课（@Valid 校验 + 防超选 + 同步链刷缓存） |
-| DELETE | `/api/v1/enrollment?studentId=&courseId=` | 退课 |
-| GET | `/api/v1/cache/stats` | 命中率 / 各级命中 / 同步与冲突计数 |
-| POST | `/api/v1/debug/simulate-conflict` | 模拟双节点并发写冲突（演示 LWW 合并） |
-| POST | `/api/v1/debug/evict-local?key=` | 手动失效 L1（演示 L2 回填） |
-| GET | `/actuator/prometheus` | Micrometer 指标 |
+| POST | `/api/v1/enrollment` | 选课（STUDENT；courseId 传参，studentId 取自 token） |
+| DELETE | `/api/v1/enrollment?courseId=` | 退课（STUDENT） |
+| GET | `/api/v1/enrollment/mine` | 我的选课记录 |
+| GET | `/api/v1/cache/stats` | 命中率 / 各级命中 / 同步与冲突计数（ADMIN） |
+| POST | `/api/v1/debug/simulate-conflict` | 模拟双节点并发写冲突（ADMIN） |
+| POST | `/api/v1/debug/evict-local?key=` | 手动失效 L1（ADMIN） |
+| GET | `/actuator/prometheus` | Micrometer 指标（白名单） |
+
+> 除白名单外所有接口需 `Authorization: Bearer <accessToken>`；演示账号 `admin/admin123`、`st001~003/123456`（由启动器幂等播种）。
 
 ## 🕰 缓存一致性同步链（核心机制）
 

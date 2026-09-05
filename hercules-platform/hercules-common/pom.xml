@@ -26,5 +26,11 @@
 			<groupId>com.fasterxml.jackson.datatype</groupId>
 			<artifactId>jackson-datatype-jsr310</artifactId>
 		</dependency>
+		<!-- 认证：JWT 签发/解析 API（阶段 A+ 认证；实现与序列化在 application 模块 runtime 提供） -->
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>${jjwt.version}</version>
+		</dependency>
 	</dependencies>
 </project>

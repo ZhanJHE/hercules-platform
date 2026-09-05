@@ -39,6 +39,10 @@ hercules:
   sync:
     node-id: node-1        # 本节点标识，用于向量时钟
     max-nodes: 10          # 向量时钟最大节点数（超限告警，对应风险 R-03）
+  auth:
+    access-ttl: 30m        # Access Token（JWT）有效期
+    refresh-ttl: 7d        # Refresh Token（Redis）有效期
+    # secret 必须配置在 application-local.yml（gitignore，≥32 字节），缺失将拒绝启动
   cache:
     local-ttl: 60s         # Caffeine L1 固定 TTL
     remote-ttl: 300s       # Redis L2 详情键 TTL

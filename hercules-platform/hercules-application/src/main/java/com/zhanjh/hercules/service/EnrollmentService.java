@@ -1,6 +1,7 @@
 package com.zhanjh.hercules.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.zhanjh.hercules.auth.JwtUtil;
 import com.zhanjh.hercules.common.BusinessException;
 import com.zhanjh.hercules.common.CacheKeys;
 import com.zhanjh.hercules.common.JsonUtil;
@@ -8,6 +9,7 @@ import com.zhanjh.hercules.mapper.CourseMapper;
 import com.zhanjh.hercules.mapper.EnrollmentMapper;
 import com.zhanjh.hercules.model.Course;
 import com.zhanjh.hercules.model.Enrollment;
+import com.zhanjh.hercules.model.User;
 import com.zhanjh.hercules.sync.config.HerculesSyncProperties;
 import com.zhanjh.hercules.sync.model.VersionedValue;
 import com.zhanjh.hercules.sync.producer.VersionChangeProducer;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 选课写路径服务：选课（enroll）与退课（withdraw），事务内写库，提交后经向量时钟同步链刷新缓存。
@@ -29,6 +32,9 @@ import java.time.LocalDateTime;
  *   <li>事件由 VersionChangeEventListener 在 AFTER_COMMIT 阶段驱动消费者：
  *       更新 Redis（course:{id}）、失效本机 L1、upsert t_cache_version。</li>
  * </ol>
+ *
+ * <p>水平越权收敛（阶段 A+ 认证）：studentId 一律取自 JWT 认证主体（requireStudentId），
+ * 学生无法操作他人数据；非 STUDENT 角色调用 → 403。
  *
  * <p>线程安全性：无实例状态；并发防超选依赖数据库行级锁下的条件更新，天然安全。
  *
@@ -78,10 +84,11 @@ public class EnrollmentService {
     }
 
     /**
-     * 选课：扣减课程余量并写入选课记录（事务内完成）。
+     * 选课：为当前登录学生扣减课程余量并写入选课记录（事务内完成）。
      *
      * <p>执行步骤：
      * <ol>
+     *   <li>从认证主体取 studentId（非学生角色 → 403，水平越权收敛）；</li>
      *   <li>查课程，不存在 → 404；</li>
      *   <li>{@code increaseEnrolled}：{@code UPDATE t_course SET enrolled = enrolled + 1
      *       WHERE id = ? AND enrolled < capacity}，0 行受影响说明余量已满 → 409（防超选核心）；</li>
@@ -89,14 +96,16 @@ public class EnrollmentService {
      *   <li>发布课程版本事件（事务提交后才被消费，刷新 course:{id} 缓存）。</li>
      * </ol>
      *
-     * @param studentId 学生 ID
+     * @param principal 认证主体（JWT claims，含 studentId）
      * @param courseId  课程 ID
      * @return 新建的选课记录（含自增主键，status=1 已选）
-     * @throws BusinessException code=404（HTTP 404）课程不存在；
+     * @throws BusinessException code=403（HTTP 403）非学生角色；
+     *                           code=404（HTTP 404）课程不存在；
      *                           code=409（HTTP 409）课程容量已满（enrolled 已达 capacity）
      */
     @Transactional(timeout = 5) // 高可用加固：事务超时 5s，防慢查询长期占用连接与线程
-    public Enrollment enroll(Long studentId, Long courseId) {
+    public Enrollment enroll(JwtUtil.AuthClaims principal, Long courseId) {
+        Long studentId = requireStudentId(principal);
         Course course = courseMapper.selectById(courseId);
         // 此处查询仅提供 404 语义与满员提示文案；真正的防超选由下一步条件 UPDATE 保证
         if (course == null) {
@@ -120,10 +129,11 @@ public class EnrollmentService {
     }
 
     /**
-     * 退课：将最新一条有效选课记录置为退选，并回退课程已选人数（事务内完成）。
+     * 退课：将当前登录学生最新一条有效选课记录置为退选，并回退课程已选人数（事务内完成）。
      *
      * <p>执行步骤：
      * <ol>
+     *   <li>从认证主体取 studentId（非学生角色 → 403）；</li>
      *   <li>查该学生该课程最新一条 status=1 记录（id 倒序 LIMIT 1），无 → 404；</li>
      *   <li>{@code decreaseEnrolled}：{@code UPDATE ... SET enrolled = enrolled - 1
      *       WHERE id = ? AND enrolled > 0}，0 行受影响 → 409；</li>
@@ -131,14 +141,16 @@ public class EnrollmentService {
      *   <li>发布课程版本事件。</li>
      * </ol>
      *
-     * @param studentId 学生 ID
+     * @param principal 认证主体（JWT claims，含 studentId）
      * @param courseId  课程 ID
      * @return 更新后的选课记录（status=2 退选）
-     * @throws BusinessException code=404（HTTP 404）未找到有效选课记录；
+     * @throws BusinessException code=403（HTTP 403）非学生角色；
+     *                           code=404（HTTP 404）未找到有效选课记录；
      *                           code=409（HTTP 409）已选人数为 0，无法退课
      */
     @Transactional(timeout = 5) // 高可用加固：事务超时 5s
-    public Enrollment withdraw(Long studentId, Long courseId) {
+    public Enrollment withdraw(JwtUtil.AuthClaims principal, Long courseId) {
+        Long studentId = requireStudentId(principal);
         // 取最大 id 的一条 status=1 记录作为当前有效记录：兼容「退选后再选」产生的多条历史
         Enrollment existing = enrollmentMapper.selectOne(new QueryWrapper<Enrollment>()
                 .eq("student_id", studentId)
@@ -159,6 +171,40 @@ public class EnrollmentService {
         enrollmentMapper.updateById(existing);
         publishCourseVersion(courseId);
         return existing;
+    }
+
+    /**
+     * 查询当前登录学生的全部选课记录（id 倒序：最新在前，含已退选流水）。
+     *
+     * <p>数据来源：t_enrollment WHERE student_id = 认证主体的 studentId（水平越权收敛，
+     * 仅能查看本人记录）。
+     *
+     * @param principal 认证主体（JWT claims，含 studentId）
+     * @return 选课记录列表，无记录时为空列表（非 null）
+     * @throws BusinessException code=403（HTTP 403）非学生角色
+     */
+    public List<Enrollment> mine(JwtUtil.AuthClaims principal) {
+        Long studentId = requireStudentId(principal);
+        return enrollmentMapper.selectList(new QueryWrapper<Enrollment>()
+                .eq("student_id", studentId)
+                .orderByDesc("id"));
+    }
+
+    /**
+     * 从认证主体提取学生业务号（水平越权收敛核心）。
+     *
+     * <p>规则：仅 STUDENT 角色可执行选课/退课/查本人记录；ADMIN 无 studentId，
+     * 一律 403（管理员不通过业务接口写选课数据）。
+     *
+     * @param principal 认证主体
+     * @return 学生业务号（t_enrollment.student_id）
+     * @throws BusinessException code=403（HTTP 403）非学生角色或缺少 studentId
+     */
+    private Long requireStudentId(JwtUtil.AuthClaims principal) {
+        if (principal == null || !User.ROLE_STUDENT.equals(principal.role()) || principal.studentId() == null) {
+            throw new BusinessException(403, "仅学生角色可执行选课操作");
+        }
+        return principal.studentId();
     }
 
     /**
