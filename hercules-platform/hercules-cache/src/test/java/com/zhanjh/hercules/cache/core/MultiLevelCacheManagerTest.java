@@ -2,6 +2,7 @@ package com.zhanjh.hercules.cache.core;
 
 import com.zhanjh.hercules.cache.config.HerculesCacheProperties;
 import com.zhanjh.hercules.cache.local.CaffeineLocalCacheManager;
+import com.zhanjh.hercules.cache.remote.NoopCacheLoadLock;
 import com.zhanjh.hercules.cache.stats.CacheStatsCollector;
 import com.zhanjh.hercules.cache.strategy.FixedTTLStrategy;
 import com.zhanjh.hercules.cache.strategy.TTLStrategy;
@@ -9,6 +10,10 @@ import com.zhanjh.hercules.testsupport.InMemoryDistributedCacheManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,7 +54,7 @@ class MultiLevelCacheManagerTest {
 
     /**
      * 每个用例前重建被测对象与依赖：L1 用真实 Caffeine、L2 用内存桩、TTL 用固定策略，
-     * 全程不依赖 Spring 容器与外部中间件。
+     * 单飞/回源锁用真实组件与 Noop 实现（内存桩 L2 下锁恒抢到），全程不依赖 Spring 容器与外部中间件。
      */
     @BeforeEach
     void setUp() {
@@ -58,7 +63,8 @@ class MultiLevelCacheManagerTest {
         remote = new InMemoryDistributedCacheManager();
         ttlStrategy = new FixedTTLStrategy(props);
         stats = new CacheStatsCollector();
-        cacheManager = new MultiLevelCacheManager(local, remote, ttlStrategy, stats);
+        cacheManager = new MultiLevelCacheManager(local, remote, ttlStrategy, stats,
+                new SingleFlight(), new NoopCacheLoadLock(), props);
     }
 
     /**
@@ -165,5 +171,66 @@ class MultiLevelCacheManagerTest {
             counter.incrementAndGet();
             return "{\"id\":1}";
         };
+    }
+
+    /**
+     * 验证点（阶段 A+ 防线③）：50 线程并发读同一未命中键（缓存击穿场景），
+     * 经进程内单飞合并后 loader 恰好执行 1 次，所有线程拿到相同值，dbLoad 计 1。
+     */
+    @Test
+    void concurrentMissesOnSameKeyTriggerSingleDbLoad() throws Exception {
+        int threads = 50;
+        AtomicInteger dbCalls = new AtomicInteger();
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        java.util.List<java.util.concurrent.Future<String>> futures = new java.util.ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            futures.add(pool.submit(() -> {
+                start.await();
+                return cacheManager.get("course:999", () -> {
+                    dbCalls.incrementAndGet();
+                    try {
+                        Thread.sleep(100); // 模拟 DB 回源耗时，放大并发窗口
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return "{\"id\":999}";
+                });
+            }));
+        }
+        start.countDown();
+        for (java.util.concurrent.Future<String> f : futures) {
+            assertThat(f.get(10, TimeUnit.SECONDS)).isEqualTo("{\"id\":999}");
+        }
+        pool.shutdown();
+        assertThat(dbCalls.get()).isEqualTo(1);
+        assertThat(stats.snapshot().dbLoad()).isEqualTo(1);
+    }
+
+    /**
+     * 验证点（阶段 A+ 防线③）：leader 失败时异常透传给等待者，且失败结果不被缓存——
+     * 下一次请求会重新竞选队长并重试回源。
+     */
+    @Test
+    void loaderFailureIsPropagatedAndRetriedOnNextCall() {
+        AtomicInteger calls = new AtomicInteger();
+        // 第一次调用 loader 抛异常（模拟 DB 抖动），第二次成功
+        try {
+            cacheManager.get("course:998", () -> {
+                if (calls.incrementAndGet() == 1) {
+                    throw new IllegalStateException("db flicker");
+                }
+                return "{\"id\":998}";
+            });
+            org.junit.jupiter.api.Assertions.fail("首次调用应抛出异常");
+        } catch (RuntimeException expected) {
+            assertThat(expected).hasMessageContaining("db flicker");
+        }
+        String v = cacheManager.get("course:998", () -> {
+            calls.incrementAndGet();
+            return "{\"id\":998}";
+        });
+        assertThat(v).isEqualTo("{\"id\":998}");
+        assertThat(calls.get()).isEqualTo(2);
     }
 }

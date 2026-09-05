@@ -37,6 +37,10 @@ public class CacheStatsCollector {
     private final AtomicLong versionApplied = new AtomicLong();
     /** 同步链应用经冲突合并（向量时钟判定 CONCURRENT）处理的版本事件次数累计。 */
     private final AtomicLong conflictDetected = new AtomicLong();
+    /** Redis 降级次数累计（熔断 OPEN 快速失败或底层异常/超时，读路径跳过 L2 直连 DB）。 */
+    private final AtomicLong redisDegraded = new AtomicLong();
+    /** Redis 熔断器当前状态名（CLOSED/HALF_OPEN/OPEN/UNKNOWN），由熔断装饰器经状态迁移事件更新。 */
+    private volatile String redisCircuitState = "UNKNOWN";
 
     /**
      * 某一时刻的缓存运行指标快照（不可变值对象，/api/v1/cache/stats 的返回载体）。
@@ -51,13 +55,15 @@ public class CacheStatsCollector {
      * @param versionApplied   同步链已应用版本事件次数
      * @param conflictDetected 同步链冲突合并次数
      * @param cacheHitRate     总体缓存命中率 = (l1Hit + l2Hit) / (l1Hit + l1Miss)，总请求数为 0 时为 0.0
+     * @param redisDegraded    Redis 降级次数累计
+     * @param redisCircuitState Redis 熔断器状态名（CLOSED/HALF_OPEN/OPEN/UNKNOWN）
      *
      * @author zhanjh
      * @since 0.0.1
      */
     public record CacheSnapshot(long l1Hit, long l1Miss, long l2Hit, long l2Miss,
                                 long dbLoad, long versionApplied, long conflictDetected,
-                                double cacheHitRate) {
+                                double cacheHitRate, long redisDegraded, String redisCircuitState) {
     }
 
     /** L1 命中计数 +1（读路径 L1 直接命中时由 MultiLevelCacheManager 调用）。 */
@@ -95,6 +101,20 @@ public class CacheStatsCollector {
         conflictDetected.incrementAndGet();
     }
 
+    /** Redis 降级计数 +1（熔断装饰器在 OPEN/异常/超时时调用）。 */
+    public void redisDegraded() {
+        redisDegraded.incrementAndGet();
+    }
+
+    /**
+     * 更新 Redis 熔断器状态名（由 ResilientDistributedCacheManager 在状态迁移事件中调用）。
+     *
+     * @param state 状态名（CLOSED/HALF_OPEN/OPEN）
+     */
+    public void redisCircuitState(String state) {
+        this.redisCircuitState = state;
+    }
+
     /**
      * 生成当前指标快照并计算总体缓存命中率。
      *
@@ -102,14 +122,15 @@ public class CacheStatsCollector {
      * 总请求数（L1 命中 + L1 未命中）；分母为 0（尚无读请求）时返回 0.0 避免除零，
      * 而非以 DB 回源数做分母。
      *
-     * @return 包含七个计数与命中率的不可变快照
+     * @return 包含计数、命中率与 Redis 熔断状态的不可变快照
      */
     public CacheSnapshot snapshot() {
         long requests = l1Hit.get() + l1Miss.get(); // 分母 = 进入读路径的总请求数
         double hitRate = requests == 0 ? 0.0
                 : (double) (l1Hit.get() + l2Hit.get()) / requests;
         return new CacheSnapshot(l1Hit.get(), l1Miss.get(), l2Hit.get(), l2Miss.get(),
-                dbLoad.get(), versionApplied.get(), conflictDetected.get(), hitRate);
+                dbLoad.get(), versionApplied.get(), conflictDetected.get(), hitRate,
+                redisDegraded.get(), redisCircuitState);
     }
 
     /**
@@ -131,5 +152,6 @@ public class CacheStatsCollector {
         FunctionCounter.builder("hercules.cache.db.load", dbLoad, AtomicLong::get).register(registry);
         FunctionCounter.builder("hercules.sync.version.applied", versionApplied, AtomicLong::get).register(registry);
         FunctionCounter.builder("hercules.sync.conflict.detected", conflictDetected, AtomicLong::get).register(registry);
+        FunctionCounter.builder("hercules.cache.redis.degraded", redisDegraded, AtomicLong::get).register(registry);
     }
 }

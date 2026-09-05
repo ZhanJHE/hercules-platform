@@ -25,6 +25,9 @@ import java.util.Map;
  *   <li>versionApplied / conflictDetected —— 同步链应用版本数 / 其中并发冲突合并数；</li>
  *   <li>cacheHitRate —— 总命中率 = (l1Hit + l2Hit) / (l1Hit + l1Miss)，即 L1 未命中后
  *       L2 命中也计为命中；尚无读请求时为 0.0；</li>
+ *   <li>redisDegraded —— Redis 降级次数（熔断 OPEN 快速失败或底层异常/超时，读路径跳过
+ *       L2 直连 DB；阶段 A+ 高可用加固）；</li>
+ *   <li>redisCircuitState —— Redis 熔断器状态（CLOSED/HALF_OPEN/OPEN/UNKNOWN）；</li>
  *   <li>localCacheSize —— 本机 Caffeine 近似条目数（estimatedSize，非精确值）。</li>
  * </ul>
  *
@@ -77,6 +80,8 @@ public class CacheStatsController {
         data.put("versionApplied", snapshot.versionApplied());
         data.put("conflictDetected", snapshot.conflictDetected());
         data.put("cacheHitRate", snapshot.cacheHitRate());
+        data.put("redisDegraded", snapshot.redisDegraded());
+        data.put("redisCircuitState", snapshot.redisCircuitState());
         data.put("localCacheSize", cacheManager.localSize());
         return R.ok(data);
     }

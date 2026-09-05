@@ -108,6 +108,8 @@ class HerculesApplicationTests {
         mvc.perform(get("/api/v1/courses").param("page", "1").param("size", "10")).andExpect(status().isOk());
 
         MvcResult second = mvc.perform(get("/api/v1/cache/stats")).andExpect(status().isOk()).andReturn();
+        // 阶段 A+：stats 响应新增 Redis 熔断状态字段（冒烟桩环境下无真实熔断器，值为 UNKNOWN）
+        mvc.perform(get("/api/v1/cache/stats")).andExpect(jsonPath("$.data.redisCircuitState").exists());
         assertThat(readLong(second, "$.data.dbLoad")).isEqualTo(dbLoadAfterFirst);
         assertThat(readLong(second, "$.data.l1Hit")).isGreaterThanOrEqualTo(1);
         assertThat(readDouble(second, "$.data.cacheHitRate")).isGreaterThan(0.0);

@@ -1,7 +1,6 @@
 package com.zhanjh.hercules.cache.remote;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
@@ -13,6 +12,10 @@ import java.time.Duration;
  * TTL 三态规则：ttl 为 null、负数或零时执行不带 EX 的 SET（键永不过期），正值时附带过期时间写入；
  * 正常路径由 FixedTTLStrategy 保证传入正值，不会产生永生键。
  *
+ * <p>装配说明：不再标注 @Component——由 CacheConfig 的 distributedCacheManager Bean
+ * 按需创建并包装为熔断装饰器（ResilientDistributedCacheManager，阶段 A+ 高可用加固），
+ * 本类保持纯命令实现、不含任何弹性逻辑。
+ *
  * <p>线程安全性：StringRedisTemplate 线程安全，本类无可变状态，可并发调用。
  *
  * <p>扩展点：Redisson（分布式锁/RMap）留待 Sprint 2+；可按需补充 mget/pipeline 批量命令。
@@ -20,7 +23,6 @@ import java.time.Duration;
  * @author zhanjh
  * @since 0.0.1
  */
-@Component
 public class RedisDistributedCacheManager implements DistributedCacheManager {
 
     /** Spring Data Redis 字符串模板（Lettuce 驱动），线程安全，仅执行 String 级基础命令。 */

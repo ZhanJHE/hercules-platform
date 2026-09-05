@@ -43,6 +43,7 @@ Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层
 | 缓存 L1 | Caffeine | 3.2.x（Boot BOM 管理） | 进程内缓存，自定义 Expiry 逐键 TTL |
 | 缓存 L2 | Redis + Lettuce | 服务端 7.x / 客户端 6.6 | 分布式缓存（仅用 GET/SET EX/DEL 基础命令） |
 | 指标 | Micrometer | 1.15.x（+ prometheus registry） | 计数器 / Prometheus 端点 |
+| 高可用 | Resilience4j | 2.4.0 | Redis 熔断降级装饰器（OPEN 时读直连 DB，快速失败） |
 | 测试 | JUnit 5 + Mockito + AssertJ + MockMvc | Boot BOM 管理 | 单元 / 集成 / 端到端冒烟 |
 | 测试数据库 | H2 | 2.3.x（test scope） | MySQL 兼容模式内存库 |
 | 同步链传输（规划） | Canal + RocketMQ | 1.1.7 / 4.9 | Sprint 2 替换进程内事件总线 |

@@ -126,4 +126,109 @@ public class HerculesCacheProperties {
     public void setListKeyPrefix(String listKeyPrefix) {
         this.listKeyPrefix = listKeyPrefix;
     }
+
+    /** 熔断装饰器开关（hercules.cache.circuit-breaker.enabled），默认 true；关闭后 L2 直连不熔断。 */
+    private boolean circuitBreakerEnabled = true;
+
+    /** 分布式回源锁开关（hercules.cache.load-lock.enabled），默认 true；Redis 不可用时自动跳过。 */
+    private boolean loadLockEnabled = true;
+
+    /** 回源锁自动过期时长（hercules.cache.load-lock.ttl），默认 3s（防持有者宕机死锁）。 */
+    private Duration loadLockTtl = Duration.ofSeconds(3);
+
+    /** 未抢到锁时探测 L2 的间隔（hercules.cache.load-lock.poll-interval），默认 50ms。 */
+    private Duration loadLockPollInterval = Duration.ofMillis(50);
+
+    /** 未抢到锁时等待队长的总预算（hercules.cache.load-lock.poll-budget），默认 2s，超时走安全阀自行回源。 */
+    private Duration loadLockPollBudget = Duration.ofSeconds(2);
+
+    /**
+     * 读取熔断装饰器开关。
+     *
+     * @return 当前值（hercules.cache.circuit-breaker.enabled），默认 true
+     */
+    public boolean isCircuitBreakerEnabled() {
+        return circuitBreakerEnabled;
+    }
+
+    /**
+     * 设置熔断装饰器开关（Spring 绑定入口）。
+     *
+     * @param circuitBreakerEnabled true=启用熔断装饰器
+     */
+    public void setCircuitBreakerEnabled(boolean circuitBreakerEnabled) {
+        this.circuitBreakerEnabled = circuitBreakerEnabled;
+    }
+
+    /**
+     * 读取分布式回源锁开关。
+     *
+     * @return 当前值（hercules.cache.load-lock.enabled），默认 true
+     */
+    public boolean isLoadLockEnabled() {
+        return loadLockEnabled;
+    }
+
+    /**
+     * 设置分布式回源锁开关（Spring 绑定入口）。
+     *
+     * @param loadLockEnabled true=启用分布式回源锁
+     */
+    public void setLoadLockEnabled(boolean loadLockEnabled) {
+        this.loadLockEnabled = loadLockEnabled;
+    }
+
+    /**
+     * 读取回源锁自动过期时长。
+     *
+     * @return 当前值（hercules.cache.load-lock.ttl），默认 3s
+     */
+    public Duration getLoadLockTtl() {
+        return loadLockTtl;
+    }
+
+    /**
+     * 设置回源锁自动过期时长（Spring 绑定入口）。
+     *
+     * @param loadLockTtl 锁 TTL，须为正值
+     */
+    public void setLoadLockTtl(Duration loadLockTtl) {
+        this.loadLockTtl = loadLockTtl;
+    }
+
+    /**
+     * 读取未抢到锁时的探测间隔。
+     *
+     * @return 当前值（hercules.cache.load-lock.poll-interval），默认 50ms
+     */
+    public Duration getLoadLockPollInterval() {
+        return loadLockPollInterval;
+    }
+
+    /**
+     * 设置未抢到锁时的探测间隔（Spring 绑定入口）。
+     *
+     * @param loadLockPollInterval 探测间隔，须为正值
+     */
+    public void setLoadLockPollInterval(Duration loadLockPollInterval) {
+        this.loadLockPollInterval = loadLockPollInterval;
+    }
+
+    /**
+     * 读取未抢到锁时的等待总预算。
+     *
+     * @return 当前值（hercules.cache.load-lock.poll-budget），默认 2s
+     */
+    public Duration getLoadLockPollBudget() {
+        return loadLockPollBudget;
+    }
+
+    /**
+     * 设置未抢到锁时的等待总预算（Spring 绑定入口）。
+     *
+     * @param loadLockPollBudget 等待预算，须为正值
+     */
+    public void setLoadLockPollBudget(Duration loadLockPollBudget) {
+        this.loadLockPollBudget = loadLockPollBudget;
+    }
 }

@@ -6,6 +6,15 @@ spring:
   sql:
     init:
       mode: always
+  # ===== 高可用加固：全链路超时传递（阶段 A+）=====
+  data:
+    redis:
+      timeout: 200ms          # Lettuce 命令超时（默认 60s！不设则 Redis 挂起会拖垮 Tomcat 线程池）
+      connect-timeout: 500ms  # 建连超时
+  datasource:
+    hikari:
+      maximum-pool-size: 20   # 配合 200 个 Tomcat 线程
+      connection-timeout: 3000 # 池内获取连接最多等 3s，超时快速失败
 
 server:
   port: 8080
@@ -13,6 +22,7 @@ server:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+    default-statement-timeout: 3  # 所有 SQL 默认语句超时（秒），防慢查询占住连接与线程
 
 management:
   endpoints:
@@ -35,3 +45,11 @@ hercules:
     list-ttl: 10s          # 列表键 TTL（最终一致窗口）
     local-max-size: 1000
     list-key-prefix: "course:list:"
+    # ===== 高可用加固：击穿防护与熔断（阶段 A+）=====
+    circuit-breaker:
+      enabled: true        # Redis 熔断装饰器开关
+    load-lock:
+      enabled: true        # 分布式回源锁开关（Redis 不可用时自动跳过）
+      ttl: 3s              # 回源锁持有时长（SET NX PX）
+      poll-interval: 50ms  # 未抢到锁时探测 L2 的间隔
+      poll-budget: 2s      # 未抢到锁时等待队长的总预算，超时走安全阀自己回源

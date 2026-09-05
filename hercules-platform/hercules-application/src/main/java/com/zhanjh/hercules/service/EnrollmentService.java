@@ -95,7 +95,7 @@ public class EnrollmentService {
      * @throws BusinessException code=404（HTTP 404）课程不存在；
      *                           code=409（HTTP 409）课程容量已满（enrolled 已达 capacity）
      */
-    @Transactional
+    @Transactional(timeout = 5) // 高可用加固：事务超时 5s，防慢查询长期占用连接与线程
     public Enrollment enroll(Long studentId, Long courseId) {
         Course course = courseMapper.selectById(courseId);
         // 此处查询仅提供 404 语义与满员提示文案；真正的防超选由下一步条件 UPDATE 保证
@@ -137,7 +137,7 @@ public class EnrollmentService {
      * @throws BusinessException code=404（HTTP 404）未找到有效选课记录；
      *                           code=409（HTTP 409）已选人数为 0，无法退课
      */
-    @Transactional
+    @Transactional(timeout = 5) // 高可用加固：事务超时 5s
     public Enrollment withdraw(Long studentId, Long courseId) {
         // 取最大 id 的一条 status=1 记录作为当前有效记录：兼容「退选后再选」产生的多条历史
         Enrollment existing = enrollmentMapper.selectOne(new QueryWrapper<Enrollment>()
