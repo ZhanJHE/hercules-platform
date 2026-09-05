@@ -48,9 +48,9 @@ Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层
 | 认证 | Spring Security + jjwt | 6.5 / 0.13.0 | 双 Token（JWT + Refresh）、BCrypt、jti 黑名单 |
 | 测试 | JUnit 5 + Mockito + AssertJ + MockMvc | Boot BOM 管理 | 单元 / 集成 / 端到端冒烟 |
 | 测试数据库 | H2 | 2.3.x（test scope） | MySQL 兼容模式内存库 |
-| 同步链传输（规划） | Canal + RocketMQ | 1.1.7 / 4.9 | Sprint 2 替换进程内事件总线 |
+| 同步链传输（规划） | mysql-binlog-connector-java（嵌入式） | 最新稳定 | 直连本机 MySQL Binlog，替换进程内事件总线（Canal/RocketMQ 见选型变更记录） |
 | 智能体（规划） | Spring AI（OpenAI 兼容接入） | 1.x | 路由 / 推荐 / 排课 / 执行四类智能体 |
-| RAG（规划） | Milvus + Neo4j | 2.3 / 5.x | 向量检索 + 图检索 |
+| RAG（规划） | 嵌入式向量检索 + Neo4j | Spring AI VectorStore / 5.x | 向量检索（预留 Milvus 扩展点）+ 图检索 |
 | 网关（规划） | Spring Cloud Gateway | 2025.0.x | 路由 / JWT 鉴权 / 限流 |
 | 前端（规划） | Vue 3 + Vite + Element Plus + ECharts | 3.4+ | 学生端对话助手 + 治理驾驶舱 |
 
@@ -146,13 +146,13 @@ java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
 | :--- | :--- | :--- |
 | 阶段 0 | MVP 纵向切片 + 全量 Javadoc + 修复 | ✅ |
 | 阶段 A | Maven 多模块化重构（11 模块） | ✅ |
-| 阶段 B | Canal + RocketMQ 真实 Binlog 同步链 | ⏳ |
+| 阶段 B | 真实 Binlog 同步链（嵌入式 binlog 连接器，免中间件） | ⏳ |
 | 阶段 C | 巡检引擎 + 补偿 SQL 自愈 | ⏳ |
 | 阶段 D | Spring AI 多智能体（路由/推荐/排课/执行） | ⏳ |
-| 阶段 E | RAG（Milvus + Neo4j 混合检索） | ⏳ |
-| 阶段 F | 可观测性大盘（Prometheus + Tempo + Grafana） | ⏳ |
+| 阶段 E | RAG（嵌入式向量检索 + Neo4j 图检索） | ⏳ |
+| 阶段 F | 可观测性大盘（Prometheus + Zipkin + Grafana，Windows 原生） | ⏳ |
 | 阶段 G | Vue3 双端前端（AI 选课助手 + 治理驾驶舱） | ⏳ |
-| 阶段 H | Gateway 网关 + JMeter 500 并发压测 + 容器化部署 | ⏳ |
+| 阶段 H | Gateway 网关 + JMeter 500 并发压测 + Windows 原生多进程部署 | ⏳ |
 
 ## 📚 文档
 
