@@ -1,0 +1,8 @@
+# hercules-application 镜像：Windows 构建的 jar 直接 COPY（避免容器内重复下载依赖）
+# BASE_IMAGE 由 compose 以镜像加速前缀注入（默认 daocloud，可换源重试）
+ARG BASE_IMAGE=eclipse-temurin:21-jre
+FROM ${BASE_IMAGE}
+WORKDIR /app
+COPY hercules-application/target/hercules-application-0.0.1-SNAPSHOT.jar /app/app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

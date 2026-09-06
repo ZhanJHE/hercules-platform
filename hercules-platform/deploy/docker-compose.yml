@@ -1,0 +1,104 @@
+# Hercules 部署编排（WSL2 + Docker Desktop，阶段 H-3）
+# 镜像加速：DOCKER_MIRROR 可换源重试（daocloud → 1ms → ...）；secret/密码为开发环境值，生产经 .env 注入
+services:
+  mysql:
+    image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/library/mysql:8.0
+    container_name: hercules-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --binlog-format=ROW          # 阶段 B：Canal/嵌入式 Binlog 连接器前置条件
+      - --log-bin=mysql-bin
+      - --server-id=1
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot123"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/library/redis:7-alpine
+    container_name: hercules-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    image: hercules-app:dev
+    build:
+      context: ..
+      dockerfile: Dockerfile-app
+      args:
+        BASE_IMAGE: ${DOCKER_MIRROR:-docker.m.daocloud.io}/library/eclipse-temurin:21-jre
+    container_name: hercules-app
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hercules?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_DATA_REDIS_HOST: redis
+      HERCULES_AUTH_SECRET: ***REDACTED-JWT-SECRET***
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"                  # 直连调试用（压测经网关 8081）
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 40s
+
+  gateway:
+    image: hercules-gateway:dev
+    build:
+      context: ..
+      dockerfile: Dockerfile-gateway
+      args:
+        BASE_IMAGE: ${DOCKER_MIRROR:-docker.m.daocloud.io}/library/eclipse-temurin:21-jre
+    container_name: hercules-gateway
+    environment:
+      APP_URI: http://app:8080
+      HERCULES_AUTH_SECRET: ***REDACTED-JWT-SECRET***
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "8081:8081"                  # 压测入口（经网关）
+      - "8082:8082"                  # 网关管理端口（健康/指标）
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8082'"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
+  prometheus:
+    image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/prom/prometheus:latest
+    container_name: hercules-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+      - gateway
+
+  grafana:
+    image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/grafana/grafana:latest
+    container_name: hercules-grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  mysql-data:

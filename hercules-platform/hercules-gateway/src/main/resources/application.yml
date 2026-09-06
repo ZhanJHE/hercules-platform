@@ -1,0 +1,35 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: hercules-gateway
+  profiles:
+    default: local
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: app
+              uri: ${APP_URI:http://localhost:8080}
+              predicates:
+                - Path=/api/**
+
+# 网关自身管理端口（独立于主端口，避免与 /api/** 路由冲突）
+management:
+  server:
+    port: 8082
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
+hercules:
+  auth:
+    # secret 经部署环境变量（compose 下发）或 application-local.yml 提供，≥32 字节
+    access-ttl: 30m
+  gateway:
+    whitelist:
+      - /api/v1/auth/login
+      - /api/v1/auth/refresh

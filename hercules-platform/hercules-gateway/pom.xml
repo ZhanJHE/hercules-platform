@@ -9,9 +9,8 @@
 	</parent>
 	<artifactId>hercules-gateway</artifactId>
 	<name>hercules-gateway</name>
-	<description>API 网关（独立进程）：Spring Cloud Gateway 路由 / JWT 鉴权 / Redis 限流（阶段 H 填充）</description>
+	<description>API 网关（独立进程，WebFlux）：路由 / JWT 验签 / 透传头注入（阶段 H）</description>
 
-	<!-- 阶段 H 启用：Spring Cloud BOM（Gateway 为 WebFlux 独立进程，不与其他模块发生编译依赖）
 	<dependencyManagement>
 		<dependencies>
 			<dependency>
@@ -23,5 +22,46 @@
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
-	-->
+
+	<dependencies>
+		<!-- Spring Cloud Gateway（Reactive/WebFlux，2025.0 起新构件名） -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+		<!-- JWT 验签复用 common 的 JwtUtil -->
+		<dependency>
+			<groupId>com.zhanjh</groupId>
+			<artifactId>hercules-common</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>${jjwt.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<version>${jjwt.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
 </project>
