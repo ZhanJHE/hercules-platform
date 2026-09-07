@@ -77,14 +77,14 @@ public class LoadTestSeeder implements ApplicationRunner {
         long baseId = existing; // course_code 编号从已有数量续起，保证幂等
         for (int i = 1; i <= remaining; i++) {
             long n = baseId + i;
-            int capacity = 100 + random.nextInt(101);          // 100~200
+            // 容量 100000 + 已选 ≤2000：500 并发 10 分钟压测绝不会打满（409 不污染错误率统计）
             batch.add(new Object[]{
                     COURSE_CODE_PREFIX + n,
                     "压测课程-" + n,
                     "压测教师-" + (n % 50 + 1),
                     1.0 + (n % 8) * 0.5,
-                    capacity,
-                    random.nextInt(capacity),                   // 0..capacity-1，保证有名额
+                    100000,
+                    random.nextInt(2000),
                     "{\"day\":" + (n % 5 + 1) + ",\"sections\":[" + (n % 4 + 1) + "," + (n % 4 + 2) + "]}",
                     "[]",
                     "/loadtest/" + n + ".pdf"

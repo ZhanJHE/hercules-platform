@@ -5,6 +5,7 @@ import com.zhanjh.hercules.common.R;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -12,11 +13,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /**
  * 全局异常兜底处理器（@RestControllerAdvice）：把各类异常统一转换为 R 响应体，Controller 内无需逐个 try-catch。
  *
- * <p>Spring 按异常类型选择最具体的 @ExceptionHandler，因此 BusinessException 与参数校验异常不会落入兜底分支。三类处理：
+ * <p>Spring 按异常类型选择最具体的 @ExceptionHandler，因此 BusinessException 与参数校验异常不会落入兜底分支。四类处理：
  * <ul>
  *   <li>BusinessException —— 预期业务失败：HTTP 状态 = 异常 code（4xx/5xx），响应体 R.fail(code, message)，不打印堆栈；</li>
  *   <li>MethodArgumentNotValidException —— @Valid 请求体校验失败：固定 400，message 取第一条字段错误的 defaultMessage，
  *       无字段错误时回退为「参数校验失败」；</li>
+ *   <li>HttpMediaTypeNotSupportedException —— Content-Type 与请求体不符：415（防止落入 500 兜底暴露内部细节）；</li>
  *   <li>Exception —— 未预期异常：记录 ERROR 级堆栈后返回 500 与「服务内部错误: 原始消息」。</li>
  * </ul>
  *
@@ -41,6 +43,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<R<Void>> handleBusiness(BusinessException e) {
         return ResponseEntity.status(e.getCode()).body(R.fail(e.getCode(), e.getMessage()));
+    }
+
+    /**
+     * 处理 Content-Type 与请求体不符（如 JSON 体以 text/plain 发送）→ 415，
+     * 避免落入兜底 500 分支（该分支会暴露内部异常细节）。
+     *
+     * @param e 媒体类型不支持异常
+     * @return HTTP 415、code=415 的统一响应体
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<R<Void>> handleMediaType(HttpMediaTypeNotSupportedException e) {
+        return ResponseEntity.status(415).body(R.fail(415, "Content-Type 不受支持: " + e.getContentType()));
     }
 
     /**

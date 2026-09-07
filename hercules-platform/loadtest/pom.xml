@@ -11,6 +11,11 @@
 
 	<properties>
 		<maven.deploy.skip>true</maven.deploy.skip>
+		<!-- 压测参数默认值（CLI 用 -Dthreads=300 -Dduration=300 覆盖，经 propertiesUser 透传为 JMeter -J 属性） -->
+		<threads>100</threads>
+		<rampup>30</rampup>
+		<duration>300</duration>
+		<jmeter.testfile>hercules-loadtest.jmx</jmeter.testfile>
 	</properties>
 
 	<build>
@@ -19,6 +24,21 @@
 				<groupId>com.lazerycode.jmeter</groupId>
 				<artifactId>jmeter-maven-plugin</artifactId>
 				<version>3.8.0</version>
+				<executions>
+					<!-- 显式声明执行 ID：jmeter:jmeter 依赖 configuration 执行产出的运行时 -->
+					<execution>
+						<id>configuration</id>
+						<goals>
+							<goal>configure</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>jmeter</id>
+						<goals>
+							<goal>jmeter</goal>
+						</goals>
+					</execution>
+				</executions>
 				<configuration>
 					<!-- JMeter 5.6.3（起步文档选型 JMeter 5.6+）；HTTP 采样器所需构件 -->
 					<jmeterExtensions>
@@ -34,11 +54,26 @@
 						</arguments>
 					</jMeterProcessJVMSettings>
 					<testFilesIncluded>
-						<jMeterTestFile>${jmeter.testfile:hercules-loadtest.jmx}</jMeterTestFile>
+						<jMeterTestFile>${jmeter.testfile}</jMeterTestFile>
 					</testFilesIncluded>
 					<resultsFileNameDateFormat>yyyyMMdd_HHmmss</resultsFileNameDateFormat>
 					<!-- 跑完自动生成 HTML 可视化报告（target/jmeter/reports） -->
 					<generateReports>true</generateReports>
+					<!-- 透传为 JMeter -J 用户属性，供 JMX 内 __P() 读取 -->
+					<propertiesUser>
+						<property>
+							<name>threads</name>
+							<value>${threads}</value>
+						</property>
+						<property>
+							<name>rampup</name>
+							<value>${rampup}</value>
+						</property>
+						<property>
+							<name>duration</name>
+							<value>${duration}</value>
+						</property>
+					</propertiesUser>
 				</configuration>
 			</plugin>
 		</plugins>
