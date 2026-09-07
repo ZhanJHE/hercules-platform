@@ -1,0 +1,136 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["hercules"],
+  "templating": { "list": [] },
+  "time": { "from": "now-30m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Hercules 压测总览",
+  "uid": "hercules-overview",
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "应用 QPS（每秒请求数）",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"hercules-app\"}[1m]))",
+          "legendFormat": "app QPS"
+        },
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"hercules-gateway\"}[1m]))",
+          "legendFormat": "gateway QPS"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "响应延迟 P95 / P99（应用）",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"hercules-app\"}[2m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"hercules-app\"}[2m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "错误率（按状态码，4xx/5xx）",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"hercules-app\", status=~\"4..\"}[1m]))",
+          "legendFormat": "4xx"
+        },
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"hercules-app\", status=~\"5..\"}[1m]))",
+          "legendFormat": "5xx"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "缓存 L1/L2 命中与回源（次/秒）",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "rate(hercules_cache_l1_hit_total[1m])", "legendFormat": "L1 hit" },
+        { "expr": "rate(hercules_cache_l1_miss_total[1m])", "legendFormat": "L1 miss" },
+        { "expr": "rate(hercules_cache_l2_hit_total[1m])", "legendFormat": "L2 hit" },
+        { "expr": "rate(hercules_cache_l2_miss_total[1m])", "legendFormat": "L2 miss" },
+        { "expr": "rate(hercules_cache_db_load_total[1m])", "legendFormat": "DB load" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "同步链：版本应用 / 冲突合并（次/秒）",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "rate(hercules_sync_version_applied_total[1m])", "legendFormat": "version applied" },
+        { "expr": "rate(hercules_sync_conflict_detected_total[1m])", "legendFormat": "conflict" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Redis 降级 / 熔断状态",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "rate(hercules_cache_redis_degraded_total[1m])", "legendFormat": "degraded/s" },
+        { "expr": "hercules_cache_redis_circuit_state", "legendFormat": "circuit state (0=CLOSED 1=HALF_OPEN 2=OPEN)" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "JVM 堆内存使用",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes{job=\"hercules-app\", area=\"heap\"})",
+          "legendFormat": "heap used"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Tomcat 工作线程",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "tomcat_threads_busy_threads{job=\"hercules-app\"}", "legendFormat": "busy" },
+        { "expr": "tomcat_threads_current_threads{job=\"hercules-app\"}", "legendFormat": "current" }
+      ]
+    }
+  ]
+}

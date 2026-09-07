@@ -37,6 +37,8 @@
 						<jMeterTestFile>${jmeter.testfile:hercules-loadtest.jmx}</jMeterTestFile>
 					</testFilesIncluded>
 					<resultsFileNameDateFormat>yyyyMMdd_HHmmss</resultsFileNameDateFormat>
+					<!-- 跑完自动生成 HTML 可视化报告（target/jmeter/reports） -->
+					<generateReports>true</generateReports>
 				</configuration>
 			</plugin>
 		</plugins>
