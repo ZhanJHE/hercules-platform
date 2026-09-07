@@ -80,7 +80,8 @@ $propsFile = Join-Path $env:TEMP "jmeter-props-$stamp.properties"
 
 # 6) 运行（headless + 自动 HTML 报告 + 看门狗限时）
 $env:JMETER_HOME = $runtime
-$env:JVM_ARGS = "-Xms1g -Xmx2g"
+# 客户端 JVM 调优（阶段H-4调研）：加堆减 GC 频率；客户端重吞吐选 ParallelGC（服务端保留 G1 求低延迟）
+$env:JVM_ARGS = "-Xms1g -Xmx4g -XX:+UseParallelGC"
 New-Item -ItemType Directory -Path (Join-Path $scriptDir "results") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $scriptDir "reports") -Force | Out-Null
 $jtl = Join-Path $scriptDir "results\$stamp.jtl"

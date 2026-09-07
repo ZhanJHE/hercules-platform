@@ -46,6 +46,9 @@ services:
       HERCULES_AUTH_DEMO_STUDENT_COUNT: "60"     # 压测登录账号池 st001~st060
       HERCULES_LOADTEST_SEED: "true"             # 启动时播种 5000 门压测课程
       HERCULES_LOADTEST_COURSE_COUNT: "5000"
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "40"   # 阶段H-4压测实证：20连接在150写并发下饱和(waiting=116)
+      # JVM 显式调优（阶段H-4调研）：默认自适应为 Xms250M/Xmx4G——起步过小、上限过大；G1 保留+暂停目标；GC 日志供论文取证
+      JAVA_TOOL_OPTIONS: "-Xms1g -Xmx2g -XX:+AlwaysPreTouch -XX:MaxGCPauseMillis=50 -Xlog:gc*:file=/app/logs/gc.log:time,uptime:filecount=5,filesize=20m"
     depends_on:
       mysql:
         condition: service_healthy
@@ -53,6 +56,7 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"                  # 直连调试用（压测经网关 8081）
+    mem_limit: 3g                    # JVM(2g堆)+元空间+堆外+线程栈的预算上限，隔离与 gateway/MySQL 的邻居效应
     volumes:
       - hercules-app-logs:/app/logs  # 日志落盘（logback 滚动文件 + 认证审计）
     healthcheck:
@@ -73,12 +77,15 @@ services:
     environment:
       APP_URI: http://app:8080
       HERCULES_AUTH_SECRET: ***REDACTED-JWT-SECRET***
+      # 轻量网关：默认自适应 Xmx4G 纯属浪费，显式收小（阶段H-4调研）
+      JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m -XX:+AlwaysPreTouch -Xlog:gc*:file=/app/logs/gc.log:time,uptime:filecount=3,filesize=10m"
     depends_on:
       app:
         condition: service_healthy
     ports:
       - "8081:8081"                  # 压测入口（经网关）
       - "8082:8082"                  # 网关管理端口（健康/指标）
+    mem_limit: 1g                    # 网关轻量（路由+JWT），512m 堆 + 元空间/堆外余量
     volumes:
       - hercules-gateway-logs:/app/logs
     healthcheck:
