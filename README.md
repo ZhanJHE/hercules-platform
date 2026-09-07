@@ -88,8 +88,8 @@ hercules-platform/               # Maven 多模块父工程
 
 ```bat
 :: 1) 克隆
-git clone https://github.com/ZhanJHE/Hercules.git
-cd Hercules
+git clone https://github.com/ZhanJHE/hercules-platform.git
+cd hercules-platform
 
 :: 2) 配置本机数据库凭据（已 gitignore）
 ::    创建 hercules-platform/hercules-application/src/main/resources/application-local.yml
