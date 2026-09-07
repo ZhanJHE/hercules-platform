@@ -43,6 +43,9 @@ services:
       SPRING_DATASOURCE_PASSWORD: root123
       SPRING_DATA_REDIS_HOST: redis
       HERCULES_AUTH_SECRET: ***REDACTED-JWT-SECRET***
+      HERCULES_AUTH_DEMO_STUDENT_COUNT: "60"     # 压测登录账号池 st001~st060
+      HERCULES_LOADTEST_SEED: "true"             # 启动时播种 5000 门压测课程
+      HERCULES_LOADTEST_COURSE_COUNT: "5000"
     depends_on:
       mysql:
         condition: service_healthy

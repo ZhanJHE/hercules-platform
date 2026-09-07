@@ -42,7 +42,11 @@ hercules:
   auth:
     access-ttl: 30m        # Access Token（JWT）有效期
     refresh-ttl: 7d        # Refresh Token（Redis）有效期
+    demo-student-count: 3  # 演示学生账号数 st001~st{N}（压测部署经环境变量调大）
     # secret 必须配置在 application-local.yml（gitignore，≥32 字节），缺失将拒绝启动
+  loadtest:
+    seed: false            # 压测数据播种开关（仅压测部署开启，见 LoadTestSeeder）
+    course-count: 5000     # 压测课程目标数量（LOADTEST-* 前缀）
   cache:
     local-ttl: 60s         # Caffeine L1 固定 TTL
     remote-ttl: 300s       # Redis L2 详情键 TTL

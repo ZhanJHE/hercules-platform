@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>com.zhanjh</groupId>
+	<artifactId>hercules-loadtest</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>hercules-loadtest</name>
+	<description>压测工具模块：经 jmeter-maven-plugin 从 Maven Central 组装 JMeter（无需单独安装），执行阶梯压测计划</description>
+
+	<properties>
+		<maven.deploy.skip>true</maven.deploy.skip>
+	</properties>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>com.lazerycode.jmeter</groupId>
+				<artifactId>jmeter-maven-plugin</artifactId>
+				<version>3.8.0</version>
+				<configuration>
+					<!-- JMeter 5.6.3（起步文档选型 JMeter 5.6+）；HTTP 采样器所需构件 -->
+					<jmeterExtensions>
+						<artifact>org.apache.jmeter:ApacheJMeter_http:5.6.3</artifact>
+					</jmeterExtensions>
+					<!-- 500 线程并发所需的 JVM 堆 -->
+					<jMeterProcessJVMSettings>
+						<arguments>
+							<argument>-Xms</argument>
+							<argument>1024M</argument>
+							<argument>-Xmx</argument>
+							<argument>2048M</argument>
+						</arguments>
+					</jMeterProcessJVMSettings>
+					<testFilesIncluded>
+						<jMeterTestFile>${jmeter.testfile:hercules-loadtest.jmx}</jMeterTestFile>
+					</testFilesIncluded>
+					<resultsFileNameDateFormat>yyyyMMdd_HHmmss</resultsFileNameDateFormat>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

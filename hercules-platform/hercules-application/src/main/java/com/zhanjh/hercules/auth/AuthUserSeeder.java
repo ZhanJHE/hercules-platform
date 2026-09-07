@@ -39,23 +39,30 @@ public class AuthUserSeeder implements ApplicationRunner {
 
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    /** 演示学生账号数量（hercules.auth.demo-student-count）：st001~st{N}，student_id=20240001..N；压测期 compose 调大为 60。 */
+    private final int demoStudentCount;
 
-    public AuthUserSeeder(UserMapper userMapper, PasswordEncoder passwordEncoder) {
+    public AuthUserSeeder(UserMapper userMapper,
+                          PasswordEncoder passwordEncoder,
+                          @org.springframework.beans.factory.annotation.Value("${hercules.auth.demo-student-count:3}")
+                          int demoStudentCount) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
+        this.demoStudentCount = demoStudentCount;
     }
 
     /**
-     * 启动时幂等播种演示账号：按 username 查重，存在即跳过。
+     * 启动时幂等播种账号：管理员 1 个 + 学生账号 demoStudentCount 个（st001~st{N}，
+     * student_id=20240001 起连续编号），按 username 查重，存在即跳过。
      *
      * @param args 启动参数（未使用）
      */
     @Override
     public void run(ApplicationArguments args) {
         seed("admin", "admin123", User.ROLE_ADMIN, null);
-        seed("st001", "123456", User.ROLE_STUDENT, 20240001L);
-        seed("st002", "123456", User.ROLE_STUDENT, 20240002L);
-        seed("st003", "123456", User.ROLE_STUDENT, 20240003L);
+        for (int i = 1; i <= demoStudentCount; i++) {
+            seed(String.format("st%03d", i), "123456", User.ROLE_STUDENT, 20240000L + i);
+        }
     }
 
     /**
