@@ -4,6 +4,8 @@ import com.zhanjh.hercules.auth.JwtUtil;
 import com.zhanjh.hercules.common.JsonUtil;
 import com.zhanjh.hercules.common.R;
 import com.zhanjh.hercules.gateway.config.GatewayProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -19,12 +21,16 @@ import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.UUID;
 
 /**
- * 网关全局 JWT 过滤器（阶段 H 最小实现）：白名单放行 + 验签/过期 + 可信透传头注入。
+ * 网关全局 JWT 过滤器（阶段 H 最小实现 + 阶段 A+ 日志设计）：traceId 贯通、白名单放行、
+ * 验签/过期、可信透传头注入。
  *
  * <p>处理流程：
  * <ol>
+ *   <li>traceId：复用请求携带的 {@code X-Trace-Id}，缺失则生成 16 位短 ID；注入下游请求头
+ *       与响应头（前端/排障可按 traceId 反查两端日志），网关自身 401 日志显式携带；</li>
  *   <li>白名单（hercules.gateway.whitelist）命中 → 直接放行；</li>
  *   <li>剥离外部伪造的 X-Auth-UserId / X-Auth-Role 请求头（防越权经典漏洞：先 remove 后 inject）；</li>
  *   <li>无 Bearer → 401；解析失败（伪造/过期/格式错误）→ 401；</li>
@@ -32,6 +38,7 @@ import java.util.List;
  * </ol>
  *
  * <p>黑名单查询暂缓（应用层 JWT 过滤器已有黑名单兜底，双层校验）；限流留待后续。
+ * WebFlux/Reactor 无 MDC 线程绑定语义，traceId 以显式参数与消息内嵌方式记录。
  *
  * <p>线程安全性：无可变状态（AntPathMatcher 线程安全），可并发调用。
  *
@@ -41,10 +48,14 @@ import java.util.List;
 @Component
 public class JwtGatewayFilter implements GlobalFilter, Ordered {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtGatewayFilter.class);
+
     /** 透传头：用户主键（经网关剥离伪造后注入，下游可信任）。 */
     public static final String HEADER_USER_ID = "X-Auth-UserId";
     /** 透传头：角色。 */
     public static final String HEADER_ROLE = "X-Auth-Role";
+    /** 链路标识请求/响应头（与应用侧 TraceIdFilter 同名，保证两端日志可串联）。 */
+    public static final String HEADER_TRACE_ID = "X-Trace-Id";
 
     private final JwtUtil jwtUtil;
     private final GatewayProperties gatewayProps;
@@ -72,20 +83,35 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * 过滤逻辑：白名单 → 剥离伪造头 → 验签 → 注入透传头 → 放行；失败 → 401 JSON。
+     * 过滤逻辑：traceId 贯通 → 白名单 → 剥离伪造头 → 验签 → 注入透传头 → 放行；失败 → 401 JSON。
      */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
+        // traceId 贯通：复用上游携带值，缺失现场生成；同时写入下游请求头与响应头
+        // （traceId 只赋值一次以满足 effectively-final，供下方 lambda 捕获）
+        String upstream = exchange.getRequest().getHeaders().getFirst(HEADER_TRACE_ID);
+        String traceId = (upstream == null || upstream.isBlank())
+                ? UUID.randomUUID().toString().replace("-", "").substring(0, 16)
+                : upstream;
+        ServerHttpRequest withTrace = exchange.getRequest().mutate()
+                .headers(h -> {
+                    h.remove(HEADER_TRACE_ID);
+                    h.add(HEADER_TRACE_ID, traceId);
+                })
+                .build();
+        // 响应头由下游应用回写（TraceIdFilter）；网关仅在拒绝路径（无下游）自行添加，避免重复头
+        ServerWebExchange tracedExchange = exchange.mutate().request(withTrace).build();
+
         List<String> whitelist = gatewayProps.getWhitelist();
         for (String pattern : whitelist) {
             if (pathMatcher.match(pattern, path)) {
-                return chain.filter(exchange);
+                return chain.filter(tracedExchange);
             }
         }
 
         // 先剥离外部伪造的透传头（无论后续是否通过校验）
-        ServerHttpRequest stripped = exchange.getRequest().mutate()
+        ServerHttpRequest stripped = withTrace.mutate()
                 .headers(h -> {
                     h.remove(HEADER_USER_ID);
                     h.remove(HEADER_ROLE);
@@ -94,13 +120,13 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
 
         String auth = stripped.getHeaders().getFirst("Authorization");
         if (auth == null || !auth.startsWith("Bearer ")) {
-            return reject(exchange, "未登录或登录已过期");
+            return reject(tracedExchange, traceId, path, "未登录或登录已过期");
         }
         JwtUtil.AuthClaims claims;
         try {
             claims = jwtUtil.parse(auth.substring(7));
         } catch (Exception e) {
-            return reject(exchange, "token 无效或已过期");
+            return reject(tracedExchange, traceId, path, "token 无效或已过期");
         }
 
         // 校验通过：注入可信透传头（下游服务可信任）
@@ -110,17 +136,20 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
                     h.add(HEADER_ROLE, claims.role());
                 })
                 .build();
-        return chain.filter(exchange.mutate().request(trusted).build());
+        return chain.filter(tracedExchange.mutate().request(trusted).build());
     }
 
     /**
-     * 输出统一 401 JSON 响应体（R.fail，与业务错误同构）。
+     * 输出统一 401 JSON 响应体（R.fail），并记录含 traceId 的网关拒绝日志。
      *
-     * @param exchange 当前交换
+     * @param exchange 当前交换（已携带 traceId 请求头）
+     * @param traceId  链路标识
+     * @param path     请求路径
      * @param message  错误信息
      * @return 完成信号
      */
-    private Mono<Void> reject(ServerWebExchange exchange, String message) {
+    private Mono<Void> reject(ServerWebExchange exchange, String traceId, String path, String message) {
+        log.warn("[hercules-gateway] 401 traceId={} path={} reason={}", traceId, path, message);
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);

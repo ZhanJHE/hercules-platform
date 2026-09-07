@@ -6,6 +6,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,6 +36,12 @@ import java.util.List;
  * @since 0.0.1
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    /**
+     * 认证审计 logger（logback 中名为 AUTH_AUDIT，独立落盘 auth-audit.log）：
+     * 过滤器层记录「已登出 token 被重放」的黑名单拒绝事件。
+     */
+    private static final Logger AUDIT = LoggerFactory.getLogger("AUTH_AUDIT");
 
     private final JwtUtil jwtUtil;
     private final AuthStorePort authStore;
@@ -65,6 +73,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         if (authStore.isBlacklisted(claims.jti())) {
+            AUDIT.warn("[AUTH-AUDIT] TOKEN_REJECTED_BLACKLIST jti={} path={}",
+                    claims.jti(), request.getRequestURI());
             writeR(response, 401, "token 已失效（已登出）");
             return;
         }

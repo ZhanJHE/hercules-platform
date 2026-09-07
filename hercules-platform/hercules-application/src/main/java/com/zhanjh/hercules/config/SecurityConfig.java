@@ -7,9 +7,12 @@ import com.zhanjh.hercules.auth.JwtUtil;
 import com.zhanjh.hercules.auth.RedisAuthStore;
 import com.zhanjh.hercules.common.JsonUtil;
 import com.zhanjh.hercules.common.R;
+import com.zhanjh.hercules.web.TraceIdFilter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -119,6 +122,20 @@ public class SecurityConfig {
     @Bean
     public AuthStorePort authStorePort(StringRedisTemplate redisTemplate) {
         return new RedisAuthStore(redisTemplate);
+    }
+
+    /**
+     * 注册 traceId 贯通过滤器（阶段 A+ 日志设计，HIGHEST_PRECEDENCE 保证先于
+     * Security 过滤器链，安全层 401/403 日志也携带 traceId）。
+     *
+     * @return 过滤器注册器（匹配所有路径）
+     */
+    @Bean
+    public FilterRegistrationBean<TraceIdFilter> traceIdFilter() {
+        FilterRegistrationBean<TraceIdFilter> registration = new FilterRegistrationBean<>(new TraceIdFilter());
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        registration.addUrlPatterns("/*");
+        return registration;
     }
 
     /**

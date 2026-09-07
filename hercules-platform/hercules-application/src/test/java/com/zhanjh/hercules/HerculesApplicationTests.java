@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -83,7 +84,8 @@ class HerculesApplicationTests {
     }
 
     /**
-     * 验证点：学生登录成功；课程列表返回种子数据 50 条、首条「程序设计基础」。
+     * 验证点：学生登录成功；课程列表返回种子数据 50 条、首条「程序设计基础」；
+     * 阶段 A+ 日志设计——响应头携带 X-Trace-Id（网关生成/应用透传贯通）。
      */
     @Test
     @Order(1)
@@ -92,6 +94,7 @@ class HerculesApplicationTests {
         mvc.perform(get("/api/v1/courses").param("page", "1").param("size", "10")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
+                .andExpect(header().exists("X-Trace-Id"))
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.total").value(50))
                 .andExpect(jsonPath("$.data.records.length()").value(10))

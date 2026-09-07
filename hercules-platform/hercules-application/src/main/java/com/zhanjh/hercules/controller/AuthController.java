@@ -8,7 +8,10 @@ import com.zhanjh.hercules.common.R;
 import com.zhanjh.hercules.mapper.UserMapper;
 import com.zhanjh.hercules.model.User;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotBlank;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,6 +44,12 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
+
+    /**
+     * 认证审计专用 logger（logback 中名为 AUTH_AUDIT，独立落盘 auth-audit.log，保留 90 天）。
+     * 事件：LOGIN_SUCCESS / LOGIN_FAILURE / LOGOUT / LOGOUT_FAILED。密码与 token 一律不落日志。
+     */
+    private static final Logger AUDIT = LoggerFactory.getLogger("AUTH_AUDIT");
 
     /**
      * 登录请求体。
@@ -114,19 +123,29 @@ public class AuthController {
      * <p>请求示例：{@code POST /api/v1/auth/login}，body {@code {"username":"st001","password":"123456"}}。
      *
      * @param request 登录请求体
+     * @param httpRequest HTTP 请求（取客户端 IP 供审计）
      * @return Token 对与用户信息
      * @throws BusinessException code=401 用户名或密码错误 / 账号已停用
      */
     @PostMapping("/login")
-    public R<TokenResponse> login(@RequestBody @jakarta.validation.Valid LoginRequest request) {
+    public R<TokenResponse> login(@RequestBody @jakarta.validation.Valid LoginRequest request,
+                                  HttpServletRequest httpRequest) {
+        String ip = clientIp(httpRequest);
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("username", request.username()));
         if (user == null || !passwordEncoder.matches(request.password(), user.getPassword())) {
+            AUDIT.warn("[AUTH-AUDIT] LOGIN_FAILURE username={} ip={} reason=BAD_CREDENTIALS",
+                    request.username(), ip);
             throw new BusinessException(401, "用户名或密码错误");
         }
         if (user.getStatus() == null || user.getStatus() != 1) {
+            AUDIT.warn("[AUTH-AUDIT] LOGIN_FAILURE username={} ip={} reason=DISABLED",
+                    request.username(), ip);
             throw new BusinessException(401, "账号已停用");
         }
-        return R.ok(issueTokens(user));
+        TokenResponse response = issueTokens(user);
+        AUDIT.info("[AUTH-AUDIT] LOGIN_SUCCESS username={} ip={} role={} studentId={}",
+                user.getUsername(), ip, user.getRole(), user.getStudentId());
+        return R.ok(response);
     }
 
     /**
@@ -160,27 +179,48 @@ public class AuthController {
      * <p>请求示例：{@code POST /api/v1/auth/logout}（Bearer accessToken），
      * body {@code {"refreshToken":"..."}}（可选）。
      *
-     * @param principal 认证主体（JwtAuthenticationFilter 写入）
-     * @param request   登出请求体，可为 null
+     * @param principal   认证主体（JwtAuthenticationFilter 写入）
+     * @param request     登出请求体，可为 null
+     * @param httpRequest HTTP 请求（取客户端 IP 供审计）
      * @return 统一响应体
      * @throws BusinessException code=401 未携带有效 token；
      *                           code=500 黑名单写入失败（fail-closed，用户需重试登出）
      */
     @PostMapping("/logout")
     public R<Map<String, Object>> logout(@AuthenticationPrincipal JwtUtil.AuthClaims principal,
-                                         @RequestBody(required = false) LogoutRequest request) {
+                                         @RequestBody(required = false) LogoutRequest request,
+                                         HttpServletRequest httpRequest) {
         if (principal == null) {
             throw new BusinessException(401, "未登录");
         }
+        String ip = clientIp(httpRequest);
         long remaining = principal.expiresAtMillis() - System.currentTimeMillis();
         if (remaining > 0) {
             // fail-closed：黑名单写入失败必须让用户重试，否则登出形同虚设
-            authStore.blacklistJti(principal.jti(), Duration.ofMillis(remaining));
+            try {
+                authStore.blacklistJti(principal.jti(), Duration.ofMillis(remaining));
+            } catch (RuntimeException e) {
+                AUDIT.warn("[AUTH-AUDIT] LOGOUT_FAILED username={} ip={} reason=BLACKLIST_WRITE_FAILED",
+                        principal.username(), ip);
+                throw new BusinessException(500, "登出失败，请重试");
+            }
         }
         if (request != null && request.refreshToken() != null && !request.refreshToken().isBlank()) {
             authStore.deleteRefreshToken(request.refreshToken());
         }
+        AUDIT.info("[AUTH-AUDIT] LOGOUT username={} ip={} jti={}", principal.username(), ip, principal.jti());
         return R.ok(Map.of("loggedOut", true));
+    }
+
+    /**
+     * 提取客户端 IP（供审计）：网关注入的 X-Client-IP 优先，回退直连 remoteAddr。
+     *
+     * @param httpRequest HTTP 请求
+     * @return 客户端 IP 字符串
+     */
+    private String clientIp(HttpServletRequest httpRequest) {
+        String ip = httpRequest.getHeader("X-Client-IP");
+        return ip == null || ip.isBlank() ? httpRequest.getRemoteAddr() : ip;
     }
 
     /**
