@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hercules 项目讲解 · 智慧校园多智能体服务平台</title>
+<style>
+:root{
+  --ink:#1f2328; --muted:#57606a; --line:#d8dee4; --bg:#ffffff;
+  --panel:#f6f8fa; --accent:#0b57d0; --accent-soft:#f2f7ff;
+  --ok-bg:#e6f4ea; --ok-tx:#116932; --plan-bg:#eef0f2; --plan-tx:#57606a;
+  --warn-bg:#fffaf0; --warn-line:#e0a437;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:16px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+}
+.layout{
+  display:grid; grid-template-columns:236px minmax(0,920px);
+  gap:52px; justify-content:center; padding:36px 24px 96px;
+}
+/* ---------- 目录 ---------- */
+nav.toc{position:sticky; top:24px; align-self:start; font-size:13.5px}
+nav.toc .toc-title{font-weight:600; color:var(--muted); margin:0 0 8px 10px; font-size:12px; letter-spacing:.12em}
+nav.toc a{display:block; color:var(--muted); text-decoration:none; padding:4px 10px; border-left:2px solid transparent; line-height:1.5}
+nav.toc a:hover{color:var(--accent); border-left-color:var(--accent); background:var(--panel)}
+nav.toc a b{color:inherit; font-weight:600; margin-right:6px}
+/* ---------- 正文 ---------- */
+main{min-width:0}
+.page-head{border-bottom:3px solid var(--ink); padding-bottom:20px; margin-bottom:8px}
+.page-head h1{font-size:30px; line-height:1.35; margin:0 0 6px}
+.page-head .sub{color:var(--muted); font-size:16px; margin:0 0 12px}
+.page-head .meta{font-size:13px; color:var(--muted)}
+h2{font-size:25px; margin:56px 0 14px; padding-bottom:10px; border-bottom:2px solid var(--line); line-height:1.4}
+h2 .no{color:var(--accent); margin-right:10px; font-variant-numeric:tabular-nums}
+h3{font-size:18.5px; margin:32px 0 10px}
+p{margin:10px 0}
+ul,ol{padding-left:1.5em; margin:10px 0}
+li{margin:4px 0}
+section{margin-bottom:8px}
+/* ---------- 组件 ---------- */
+table{border-collapse:collapse; width:100%; margin:14px 0; font-size:14.5px; line-height:1.6}
+th,td{border:1px solid var(--line); padding:8px 12px; text-align:left; vertical-align:top}
+th{background:var(--panel); font-weight:600; white-space:nowrap}
+tbody tr:nth-child(even){background:#fbfcfd}
+code{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-family:Consolas,"Cascadia Mono",monospace; font-size:.9em}
+pre{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px 16px; overflow:auto; font-size:13.5px; line-height:1.6}
+pre code{background:none; border:0; padding:0}
+.term{background:var(--accent-soft); border-left:3px solid var(--accent); padding:10px 14px; margin:12px 0; font-size:14.5px}
+.term b{color:var(--accent)}
+.note{background:var(--warn-bg); border-left:3px solid var(--warn-line); padding:10px 14px; margin:12px 0; font-size:14.5px}
+.badge{display:inline-block; font-size:12px; line-height:1.6; padding:0 9px; border-radius:10px; vertical-align:2px; white-space:nowrap}
+.badge.ok{background:var(--ok-bg); color:var(--ok-tx)}
+.badge.plan{background:var(--plan-bg); color:var(--plan-tx)}
+/* 纵向流程图 */
+.flow{margin:18px 0 20px}
+.fstep{border:1px solid var(--line); background:var(--panel); border-radius:6px; padding:9px 14px; font-size:14.5px}
+.fstep b{color:var(--accent); margin-right:8px}
+.farrow{text-align:center; color:var(--muted); font-size:14px; margin:3px 0; line-height:1.5}
+/* 分层架构图 */
+.arch{margin:18px 0}
+.arch .layer{border:1px solid var(--line); border-radius:6px; padding:10px 16px; margin:0 0 6px; background:var(--panel)}
+.arch .layer.core{background:var(--accent-soft); border-color:#bcd3f5}
+.arch .lname{font-weight:600}
+.arch .ldesc{font-size:14px; color:var(--muted); margin-top:2px}
+.arch .lbadges{margin-top:6px}
+/* 横向状态迁移 */
+.circuit{display:flex; align-items:stretch; gap:10px; margin:16px 0; flex-wrap:wrap}
+.cstate{flex:1 1 180px; border:1px solid var(--line); border-radius:6px; padding:10px 14px; text-align:center; background:var(--panel)}
+.cstate b{display:block; font-size:15px}
+.cstate span{font-size:13px; color:var(--muted); line-height:1.5; display:block; margin-top:4px}
+.cstate.closed{border-color:#9fd3ae; background:var(--ok-bg)}
+.cstate.open{border-color:#eec9a0; background:var(--warn-bg)}
+.carrow{flex:0 0 auto; align-self:center; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.5; max-width:150px}
+/* 依赖方向 */
+.dep{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:14px 0; font-family:Consolas,monospace; font-size:14px}
+.dep .box{border:1px solid var(--line); background:var(--panel); border-radius:6px; padding:4px 12px; font-family:inherit}
+.dep .arr{color:var(--muted)}
+footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font-size:13.5px; color:var(--muted)}
+@media (max-width:1080px){
+  .layout{grid-template-columns:1fr; gap:20px}
+  nav.toc{position:static; border:1px solid var(--line); border-radius:8px; padding:10px 6px}
+}
+@media print{
+  nav.toc{display:none}
+  .layout{display:block; padding:0}
+  pre{white-space:pre-wrap}
+  h2{page-break-after:avoid}
+  table,.fstep,.term,.note{page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc" aria-label="目录">
+  <div class="toc-title">目 录</div>
+  <a href="#overview"><b>1</b>项目概述</a>
+  <a href="#arch"><b>2</b>总体架构</a>
+  <a href="#modules"><b>3</b>模块结构</a>
+  <a href="#read-path"><b>4</b>机制一：多级缓存读路径</a>
+  <a href="#sync-chain"><b>5</b>机制二：向量时钟同步链</a>
+  <a href="#enrollment"><b>6</b>机制三：防超选选课</a>
+  <a href="#auth"><b>7</b>认证设计</a>
+  <a href="#resilience"><b>8</b>可用性防护</a>
+  <a href="#logging"><b>9</b>日志与可观测</a>
+  <a href="#data-api"><b>10</b>数据库与 API</a>
+  <a href="#stack"><b>11</b>技术选型</a>
+  <a href="#testing"><b>12</b>测试、压测与路线图</a>
+  <a href="#sources"><b>附</b>资料来源</a>
+</nav>
+
+<main>
+
+<header class="page-head">
+  <h1>Hercules 项目讲解</h1>
+  <p class="sub">智慧校园多智能体服务平台 —— 缓存一致性治理与高并发选课</p>
+  <p class="meta">文档基线：2026-09-07（代码仓库 <code>hercules-platform</code>，commit <code>aaea17e</code>）· 本文整理自项目开发文档，出现的全部数字均标注出处章节。</p>
+</header>
+
+<!-- ================= 1 概述 ================= -->
+<section id="overview">
+<h2><span class="no">1</span>项目概述</h2>
+
+<p>Hercules 是一个面向高校选课场景的毕业设计项目。选课场景的典型压力是：开放选课的短时间内，大量学生同时查询课程、同时提交选课请求。</p>
+<p>这个场景带来两个需要解决的技术问题：</p>
+<ol>
+  <li><b>读取次数远多于写入次数。</b>课程信息被反复查询，如果每次都读数据库，数据库会成为瓶颈。解决办法是把读出来的数据放在缓存里重复使用，减少对数据库的访问。</li>
+  <li><b>数据修改后，缓存里留有旧数据。</b>课程人数变了、课程信息改了，各处缓存必须更新，否则学生看到的是过期数据。解决办法是一条"修改数据库之后自动刷新缓存"的同步链路，并且能处理多个应用实例同时修改同一数据产生的冲突。</li>
+</ol>
+
+<div class="term"><b>缓存</b>：把从数据库读出的数据临时存放在更快的存储（内存或 Redis）里，之后的相同读取直接取用，不必再查数据库。
+<b>一致性</b>：缓存里的数据与数据库里的数据保持相同。<b>最终一致性</b>：允许数据在极短时间内不一致（例如 10 秒），但保证此后恢复一致。</div>
+
+<p>项目按"四层分离"的结构组织（见第 2 章），目前<b>已完成</b>的部分是：缓存一致性治理核心（多级缓存 + 向量时钟同步链）、登录认证、高可用防护、独立网关、日志体系，以及 500 并发压测验证。<b>计划中</b>的部分是：多智能体决策、RAG 检索、巡检自愈、Vue3 前端。</p>
+
+<h3>1.1 基本信息</h3>
+<table>
+  <thead><tr><th>项</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td>语言与运行时</td><td>Java 21（编译目标 21，实际运行于 JDK 25）</td></tr>
+    <tr><td>核心框架</td><td>Spring Boot 3.5.16</td></tr>
+    <tr><td>工程结构</td><td>Maven 多模块，11 个模块（3.9.16 wrapper 构建）</td></tr>
+    <tr><td>数据存储</td><td>MySQL 8（业务数据）+ Redis 7（分布式缓存）</td></tr>
+    <tr><td>自动化测试</td><td>53/53 通过，不依赖外部中间件（《测试报告》§一）</td></tr>
+    <tr><td>压测结果</td><td>500 并发稳定 10 分钟，5,027 请求/秒，错误率 0.0007%（《测试报告》§6.2）</td></tr>
+    <tr><td>部署形态</td><td>Windows + WSL2 + Docker Compose，六个容器（MySQL / Redis / 应用 / 网关 / Prometheus / Grafana）</td></tr>
+  </tbody>
+</table>
+
+<div class="term"><b>并发</b>：同一时刻有大量请求到达。<b>req/s（吞吐）</b>：系统每秒能处理的请求数，下文压测数据使用该单位。</div>
+</section>
+
+<!-- ================= 2 总体架构 ================= -->
+<section id="arch">
+<h2><span class="no">2</span>总体架构</h2>
+
+<p>系统分为四层，上层调用下层，下层不感知上层：</p>
+
+<div class="arch">
+  <div class="layer">
+    <div class="lname">L4 用户接入层</div>
+    <div class="ldesc">所有外部请求的统一入口。网关负责验证令牌签名、剥离伪造的内部请求头、生成追踪标识，然后转发给应用。前端提供学生操作界面与运维监控界面。</div>
+    <div class="lbadges"><span class="badge ok">网关已实现</span> <span class="badge plan">Vue3 前端规划中</span></div>
+  </div>
+  <div class="layer">
+    <div class="lname">L3 多智能体决策层</div>
+    <div class="ldesc">学生用自然语言提问，由四类智能体分工完成：路由（判断意图）、推荐（挑选课程）、排课冲突（检查时间与先修课约束）、执行（调用选课接口）。</div>
+    <div class="lbadges"><span class="badge plan">规划中（阶段 D）</span></div>
+  </div>
+  <div class="layer core">
+    <div class="lname">L2 一致性治理层（本项目的核心）</div>
+    <div class="ldesc">多级缓存（Caffeine + Redis）承担读压力；向量时钟同步链在数据修改后刷新缓存并消解并发冲突；定时巡检比对数据库与缓存、自动修复差异。</div>
+    <div class="lbadges"><span class="badge ok">缓存与同步链已实现</span> <span class="badge plan">巡检规划中（阶段 C）</span></div>
+  </div>
+  <div class="layer">
+    <div class="lname">L1 数据存储层</div>
+    <div class="ldesc">MySQL 8 保存业务数据，是唯一的数据事实来源；Redis 7 保存分布式缓存。后续接入 Milvus（向量检索）与 Neo4j（图查询）。</div>
+    <div class="lbadges"><span class="badge ok">MySQL / Redis 已实现</span> <span class="badge plan">Milvus / Neo4j 规划中</span></div>
+  </div>
+</div>
+
+<div class="term"><b>网关</b>：一个独立运行的入口服务，外部请求先经过它再到达应用。统一做鉴权和记录追踪标识，业务应用本身不做这些重复工作。</div>
+
+<p>第 4 到第 9 章说明的都是 L2 已实现部分的工作方式；L3 目前只有空模块占位，尚未编写代码。</p>
+</section>
+
+<!-- ================= 3 模块结构 ================= -->
+<section id="modules">
+<h2><span class="no">3</span>模块结构</h2>
+
+<div class="term"><b>Maven 多模块</b>：把一个工程按职责拆成多个目录（模块），统一构建、统一管理版本。每个模块只暴露必要的接口给其他模块，改一处不会牵连全部代码。</div>
+
+<h3>3.1 依赖方向</h3>
+<p>依赖只允许从左往右，不允许反向依赖：</p>
+<div class="dep">
+  <span class="box">hercules-common</span><span class="arr">←</span>
+  <span class="box">hercules-cache</span><span class="arr">←</span>
+  <span class="box">hercules-sync</span><span class="arr">←</span>
+  <span class="box">hercules-application</span>
+</div>
+<p><code>hercules-gateway</code> 是独立进程，不参与上述依赖链；它与 <code>hercules-application</code> 共享同一个令牌签名密钥，各自独立验签。</p>
+
+<h3>3.2 模块清单</h3>
+<table>
+  <thead><tr><th>模块</th><th>职责</th><th>代码状态</th></tr></thead>
+  <tbody>
+    <tr><td><code>hercules-common</code></td><td>公共基础：实体类、异常定义、JSON 工具</td><td>已实现（15 个类）</td></tr>
+    <tr><td><code>hercules-cache</code></td><td>缓存治理：多级缓存入口、TTL 策略、命中统计、熔断降级、防击穿</td><td>已实现（17 个类）</td></tr>
+    <tr><td><code>hercules-sync</code></td><td>数据同步：向量时钟、版本变更的生产与消费、字段级合并</td><td>已实现（13 个类）</td></tr>
+    <tr><td><code>hercules-application</code></td><td>唯一可执行应用：REST 接口、安全配置、启动类、种子数据</td><td>已实现（17 个类）</td></tr>
+    <tr><td><code>hercules-gateway</code></td><td>独立网关：JWT 验签、透传头注入、traceId 下发</td><td>已实现最小版（4 个类）</td></tr>
+    <tr><td><code>hercules-inspector</code></td><td>巡检自愈：定时比对缓存与数据库、生成修复 SQL</td><td>空模块（阶段 C 填充）</td></tr>
+    <tr><td><code>hercules-agent</code></td><td>多智能体：四类智能体的定义与协作</td><td>空模块（阶段 D 填充）</td></tr>
+    <tr><td><code>hercules-rag</code></td><td>RAG 检索：课程文档向量化与检索</td><td>空模块（阶段 E 填充）</td></tr>
+    <tr><td><code>hercules-observability</code></td><td>可观测性聚合：链路追踪配置、指标汇总</td><td>空模块（阶段 F 填充）</td></tr>
+    <tr><td><code>hercules-admin</code></td><td>管控台后端：运维接口、健康度计算</td><td>空模块（规划）</td></tr>
+    <tr><td><code>hercules-ui</code></td><td>Vue3 前端：学生端与运维端界面</td><td>未创建（阶段 G）</td></tr>
+  </tbody>
+</table>
+<p>另有两个非 Java 目录：<code>loadtest/</code>（JMeter 压测工程）与 <code>deploy/</code>（Docker Compose 部署编排文件）。</p>
+
+<div class="note">为什么先建空模块：整体结构先定下来并保持稳定，后续阶段只需要往对应模块里填充代码，不再调整工程结构。</div>
+</section>
+
+<!-- ================= 4 读路径 ================= -->
+<section id="read-path">
+<h2><span class="no">4</span>机制一：多级缓存读路径</h2>
+
+<p>课程查询使用两级缓存加数据库的三层结构，按顺序查找：</p>
+
+<div class="term"><b>命中 / 未命中</b>：请求的数据在某一层存在称为命中，不存在称为未命中。<b>cache-aside（旁路缓存）</b>：读请求先查缓存，缓存没有再查数据库，查到后写回缓存。<b>回填</b>：把数据库查到的结果写回缓存，供后续请求直接命中。</div>
+
+<h3>4.1 读请求的处理顺序</h3>
+<div class="flow">
+  <div class="fstep"><b>1</b>请求查询课程，先查 <b>L1（Caffeine，本进程内存）</b></div>
+  <div class="farrow">↓ 命中：直接返回（微秒级，最快）</div>
+  <div class="fstep"><b>2</b>L1 未命中，查 <b>L2（Redis，独立的缓存服务）</b></div>
+  <div class="farrow">↓ 命中：写回 L1，返回</div>
+  <div class="fstep"><b>3</b>L2 也未命中，查 <b>MySQL</b></div>
+  <div class="farrow">↓ 查到：写回 L2 和 L1，返回</div>
+  <div class="fstep"><b>4</b>以上每一步都记录计数（L1 命中、L2 命中、数据库回源），供命中率统计与监控使用</div>
+</div>
+
+<div class="term"><b>TTL（Time To Live）</b>：缓存条目的存活时间，到期后视为失效，下次请求重新加载数据。设置 TTL 的目的是限制"读到旧数据"的最长时间。</div>
+
+<h3>4.2 TTL 设计</h3>
+<table>
+  <thead><tr><th>缓存键类型</th><th>L1（Caffeine）</th><th>L2（Redis）</th><th>设计意图</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>课程列表键 <code>course:list:*</code></td>
+      <td>10 秒</td><td>10 秒</td>
+      <td>列表数据随选课人数频繁变化。10 秒的 TTL 构成"最终一致窗口"：最坏情况下，用户看到的是 10 秒前的列表。</td>
+    </tr>
+    <tr>
+      <td>课程详情键 <code>course:detail:{id}</code></td>
+      <td>60 秒</td><td>300 秒</td>
+      <td>单条课程读多改少，允许更长的缓存时间；详情键纳入同步链，数据变更时会主动刷新，不依赖 TTL 到期。</td>
+    </tr>
+  </tbody>
+</table>
+<p>L1 使用 Caffeine 的自定义 Expiry（过期策略）按键设置各自的 TTL，而不是全局统一时间；缓存总量有上限，超限时由 Caffeine 内置的 W-TinyLFU 策略淘汰访问频率最低的条目。</p>
+
+<h3>4.3 命中率统计</h3>
+<p><code>CacheStatsCollector</code> 用原子计数器记录 L1/L2 命中、未命中、数据库回源次数，并计算总体命中率（L1 命中 + L2 命中，除以总读请求）。数据有两个出口：</p>
+<ul>
+  <li><code>GET /api/v1/cache/stats</code>：人工查询接口（管理员权限）；</li>
+  <li>Micrometer 指标族 <code>hercules_cache_*</code>，经 <code>/actuator/prometheus</code> 暴露给 Prometheus 持续采集。</li>
+</ul>
+<div class="term"><b>Micrometer</b>：Java 的指标采集库，把程序内部的计数、状态转成标准的监控数值。<b>Prometheus</b>：按时序存放这些数值、提供查询的服务，配合 Grafana 画图展示。</div>
+</section>
+
+<!-- ================= 5 同步链 ================= -->
+<section id="sync-chain">
+<h2><span class="no">5</span>机制二：向量时钟同步链</h2>
+
+<p>这是本项目的核心机制，要解决的问题有两个：</p>
+<ol>
+  <li>数据在数据库里修改之后，各级缓存如何自动更新；</li>
+  <li>多个应用实例同时修改同一条数据、各自发出缓存刷新消息时，如何判断哪条消息代表更新的数据，以及两条消息互相覆盖不到对方时怎么办。</li>
+</ol>
+
+<div class="term"><b>向量时钟</b>：一种给数据变更打版本标记的方法。每个应用实例（节点）维护一张计数表，例如 <code>{"node-1": 3, "node-sim": 1}</code>。每次本地变更，把自己的计数加一。比较两组计数就能判断：A 的每一项都不小于 B 且至少一项更大 → A 发生在 B 之后；反之亦然；两边互有大小 → 两个修改<b>互不覆盖（并发）</b>，谁也没有包含谁的信息。</div>
+
+<h3>5.1 写路径的完整流程</h3>
+<div class="flow">
+  <div class="fstep"><b>1</b>业务事务在 MySQL 中执行并<b>提交</b>（例如选课扣减人数）</div>
+  <div class="farrow">↓ 提交成功后</div>
+  <div class="fstep"><b>2</b>Spring 的事务提交事件（AFTER_COMMIT）触发，生成一条<b>版本变更消息</b>：缓存键、新值 JSON、节点名、时间戳、向量时钟（在存量时钟基础上，本节点计数加一）</div>
+  <div class="farrow">↓ 消息进入消费端</div>
+  <div class="fstep"><b>3</b>消费端从 <code>t_cache_version</code> 表读取该键的存量时钟，与新消息的时钟比较，按第 5.2 节的规则处理</div>
+  <div class="farrow">↓ 处理完成后</div>
+  <div class="fstep"><b>4</b>更新 <code>t_cache_version</code> 中的时钟记录，供下一次比较使用</div>
+</div>
+
+<div class="term"><b>AFTER_COMMIT</b>：Spring 提供的事务钩子——只有在数据库事务真正提交成功之后才执行的动作。它保证了"先提交、后同步"的顺序：缓存刷新失败不会影响已经落库的数据。</div>
+
+<h3>5.2 消费端判定规则</h3>
+<table>
+  <thead><tr><th>比较结果</th><th>含义</th><th>动作</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>AFTER</b>（新消息更新）</td>
+      <td>新消息发生在存量数据之后，是确定的新版本</td>
+      <td>写入 Redis（L2）→ 删除 Caffeine 对应键（L1，迫使下次读取重新加载）→ 更新版本记录；"应用"计数加一</td>
+    </tr>
+    <tr>
+      <td><b>EQUAL / BEFORE</b>（相同或更旧）</td>
+      <td>消息是重复投递，或者由更旧的状态产生</td>
+      <td>直接丢弃，不做任何修改，保证重复消息无害</td>
+    </tr>
+    <tr>
+      <td><b>CONCURRENT</b>（并发冲突）</td>
+      <td>两个修改互不覆盖，例如两个节点同时改了同一条课程的不同字段</td>
+      <td>对新旧两个 JSON 值<b>逐字段做 LWW 合并</b>：每个字段取时间戳较新一方的值；合并后向量时钟取两边计数的较大值（并集）；"冲突"计数加一</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="term"><b>幂等</b>：同一条消息处理一次和处理多次，结果相同。网络重试、消息重复投递时系统不受影响。<b>LWW（Last-Write-Wins，最后写入获胜）</b>：同一个字段出现两个值时，保留修改时间较晚的那个。</div>
+
+<h3>5.3 版本记录的持久化</h3>
+<p>每个缓存键的向量时钟持久保存在 <code>t_cache_version</code> 表（一行一个键）。应用重启后判定依据不丢失；冲突发生的次数也作为指标 <code>hercules_sync_*</code> 暴露，便于监控。</p>
+
+<h3>5.4 当前形态与已知边界</h3>
+<ul>
+  <li><b>当前传输方式</b>：消息在本进程内传递（Spring 事件总线），单节点下顺序有保证。阶段 B 计划替换为 Canal 监听 MySQL Binlog + RocketMQ 队列，消息载荷结构不变，消费端判定逻辑复用。</li>
+  <li><b>已知限制</b>（记录于《工作日志》已知事项 #9）：冲突合并时旧值取自 L2；如果该键恰好已从 L2 逐出，合并退化为整体采用新值，仅存在于旧值中的字段会丢失。此限制已知、已记录，待后续版本处理。</li>
+</ul>
+
+<div class="term"><b>Binlog</b>：MySQL 记录每一行数据变更的日志文件。<b>Canal</b>：伪装成 MySQL 从库、持续读取 Binlog 的组件，把"哪张表的哪行数据变了"转成消息。<b>RocketMQ</b>：消息队列服务，把消息先存下来再交给消费者处理，使数据库变更通知与缓存刷新解耦、可异步进行。</div>
+</section>
+
+<!-- ================= 6 防超选 ================= -->
+<section id="enrollment">
+<h2><span class="no">6</span>机制三：防超选选课</h2>
+
+<p>要解决的问题：剩余名额 1 个，两个选课请求同时到达。如果"先查询剩余人数、再写入 +1"分两步执行，两个请求可能都查到"还有名额"，最终选课人数超过容量（超选）。</p>
+
+<p>解决办法：不做先查后写，改用一条带条件的 UPDATE 语句完成扣减：</p>
+
+<pre><code>UPDATE t_course SET enrolled = enrolled + 1
+WHERE id = ? AND enrolled &lt; capacity</code></pre>
+
+<ul>
+  <li>数据库保证这条语句执行期间不会被其他语句的中间状态插入干扰（原子性）；并发的两个请求由数据库逐条排队执行，不会同时通过条件检查；</li>
+  <li>影响行数为 0 说明名额已满，业务层返回 <b>409</b>；</li>
+  <li>同一学生重复选同一门课：目前应用层与数据库都没有唯一约束拦截，这是已记录的遗留问题（见第 12.5 节）。</li>
+</ul>
+
+<div class="term"><b>原子操作</b>：要么完整执行、要么完全不执行，执行期间不受其他操作干扰。<b>409</b>：HTTP 状态码，表示请求与资源当前状态冲突（此处即"名额已满"）。</div>
+
+<p>选课事务提交之后，缓存刷新交给第 5 章的同步链完成。数据库是唯一的数据事实来源：缓存刷新失败不影响选课结果本身，最坏情况是缓存短暂保留旧数据，直到 TTL 到期或下一次同步。</p>
+</section>
+
+<!-- ================= 7 认证 ================= -->
+<section id="auth">
+<h2><span class="no">7</span>认证设计</h2>
+
+<p>系统采用双令牌（Token）方案。令牌是登录成功后服务端发给客户端的凭证，之后的每次请求都携带它证明身份。</p>
+
+<div class="term"><b>JWT（JSON Web Token）</b>：一种自带签名和过期时间的令牌格式。服务端用密钥验证签名即可确认身份与内容，不需要查库。<b>jti</b>：每张令牌的唯一编号，用于精确吊销某一张令牌。<b>BCrypt</b>：密码的单向加密算法，数据库只存加密结果，不存明文；验证时把输入重新加密后比对。<b>水平越权</b>：普通用户访问另一个同级用户的数据，例如学生 A 冒充学生 B 选课。</div>
+
+<h3>7.1 两张令牌的分工</h3>
+<table>
+  <thead><tr><th>名称</th><th>形态</th><th>有效期</th><th>存放位置</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Access Token（访问令牌）</td>
+      <td>JWT（HS256 签名）</td>
+      <td>30 分钟</td>
+      <td>前端内存（不写入 localStorage）</td>
+      <td>调用业务接口，放在 <code>Authorization: Bearer</code> 请求头</td>
+    </tr>
+    <tr>
+      <td>Refresh Token（刷新令牌）</td>
+      <td>随机 UUID，不含业务信息</td>
+      <td>7 天</td>
+      <td>服务端 Redis（<code>auth:refresh:{uuid}</code> → userId）</td>
+      <td>Access 过期后换取新的一对令牌</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>这样分工的原因：Access 有效期短，即使泄露， 30 分钟后自动作废；Refresh 保存在服务端，管理员可以随时删除某条记录来强制下线；每次刷新时旧 Refresh 立即作废并换发新的（<b>旋转式刷新</b>），旧令牌被截获重放的窗口极小。</p>
+
+<h3>7.2 登录、请求与登出的流程</h3>
+<div class="flow">
+  <div class="fstep"><b>登录</b>：校验用户名与 BCrypt 密码 → 签发 Access JWT（内容只含 userId、用户名、角色、学号、jti、过期时间）→ 向 Redis 写入 Refresh 记录</div>
+  <div class="farrow">↓</div>
+  <div class="fstep"><b>业务请求</b>：验证签名与过期时间 → 查黑名单 <code>auth:blacklist:{jti}</code>（已登出的令牌会被拒绝）→ 通过后进入业务逻辑；角色不足返回 403</div>
+  <div class="farrow">↓ Access 过期时</div>
+  <div class="fstep"><b>刷新</b>：客户端提交 Refresh Token → 服务端验证存在性 → 删除旧 UUID、写入新 UUID，换发新令牌对（旋转）</div>
+  <div class="farrow">↓ 用户主动登出时</div>
+  <div class="fstep"><b>登出</b>：Access 的 jti 写入黑名单（TTL 等于 Access 剩余有效期）→ 删除 Refresh 记录 → 此后旧 Access 一律 401</div>
+</div>
+
+<h3>7.3 水平越权的收敛</h3>
+<p>选课接口的请求体只接受 <code>courseId</code>；<code>studentId</code> 一律从令牌中解析，前端传什么值都不生效。学生 A 无法操作学生 B 的数据。新增 <code>GET /api/v1/enrollment/mine</code> 供学生查询本人选课记录。</p>
+
+<h3>7.4 Redis 故障时的取舍</h3>
+<table>
+  <thead><tr><th>操作</th><th>Redis 故障时的策略</th><th>理由</th></tr></thead>
+  <tbody>
+    <tr><td>黑名单查询</td><td><b>fail-open</b>：放行请求</td><td>保可用。Access 本身 30 分钟过期，已登出令牌的风险窗口有上限</td></tr>
+    <tr><td>刷新 / 登出</td><td><b>fail-closed</b>：拒绝请求</td><td>保安全。这两步必须写 Redis，写不进去就宁可失败，避免状态不一致</td></tr>
+  </tbody>
+</table>
+<div class="term"><b>fail-open</b>：依赖的组件故障时选择放行，保可用性。<b>fail-closed</b>：依赖故障时选择拒绝，保安全性。两者按操作的安全影响分别选择。</div>
+
+<h3>7.5 网关与应用的双层校验</h3>
+<p>网关与应用使用同一个签名密钥，各自独立验签（防御纵深：绕过网关直连应用也过不了应用这一关）。网关负责剥离外部伪造的 <code>X-Auth-*</code> 请求头——这类内部头只有网关验证通过后才会注入，后端只信任重新注入的值。</p>
+</section>
+
+<!-- ================= 8 可用性 ================= -->
+<section id="resilience">
+<h2><span class="no">8</span>可用性防护</h2>
+
+<p>要解决的问题：Redis 或数据库变慢、挂掉时，请求不能无限等待，故障不能扩散到整个服务。项目按四道防线处理。</p>
+
+<h3>8.1 第一道：全链路超时传递</h3>
+<p>每一层依赖都设置超时上限，最坏情况的等待时间可以事先算出：</p>
+<table>
+  <thead><tr><th>环节</th><th>超时</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>Redis 单条命令</td><td>200ms</td><td>建立连接 500ms；超时后按失败处理，进入熔断统计</td></tr>
+    <tr><td>获取数据库连接</td><td>3 秒</td><td>连接池（Hikari，20→40 连接）耗尽时排队，超过 3 秒快速失败</td></tr>
+    <tr><td>单条 SQL</td><td>3 秒</td><td>MyBatis 默认语句超时</td></tr>
+    <tr><td>选课事务</td><td>5 秒</td><td>Spring 事务超时，覆盖其中全部数据库操作</td></tr>
+  </tbody>
+</table>
+<p>压测中写路径的 20 个错误正是该设计生效的表现：连接池饱和后，排队超过 3 秒的请求快速失败返回，而不是无限堆积拖垮整个服务（《测试报告》§6.3）。</p>
+
+<h3>8.2 第二道：Redis 熔断降级</h3>
+<div class="term"><b>熔断</b>：对某个依赖的连续失败进行统计，达到阈值后暂时停止调用它，直接走备用路径，避免每个请求都白白等待超时。<b>降级</b>：熔断期间的备用处理方式，用功能换可用。<b>半开</b>：熔断打开一段时间后放行少量请求试探依赖是否恢复，据此决定关闭或继续熔断。</div>
+
+<p>熔断由 Resilience4j 实现，参数：统计窗口 50 次调用（至少 10 次才判定）、失败率 ≥50% 或慢调用（超过 300ms）占比 ≥80% 时打开；打开期间不再访问 Redis；10 秒后进入半开，放行 2 次探测，成功则关闭，失败则重新打开。</p>
+
+<div class="circuit">
+  <div class="cstate closed"><b>CLOSED</b><span>正常状态，调用放行，持续统计失败率</span></div>
+  <div class="carrow">失败率 ≥50%<br>或慢调用占比 ≥80%</div>
+  <div class="cstate open"><b>OPEN</b><span>跳过 Redis，读直接查数据库，写跳过缓存写入</span></div>
+  <div class="carrow">等待 10 秒</div>
+  <div class="cstate half"><b>HALF_OPEN</b><span>放行 2 次探测请求</span></div>
+</div>
+<p>探测成功 → 回到 CLOSED；探测失败 → 回到 OPEN。</p>
+
+<h4>降级时的具体行为</h4>
+<table>
+  <thead><tr><th>操作</th><th>降级行为</th><th>依据</th></tr></thead>
+  <tbody>
+    <tr><td>读缓存（get）</td><td>返回空 → 读路径直接查 MySQL</td><td>数据库是事实来源，功能不中断</td></tr>
+    <tr><td>写缓存（put）</td><td>跳过</td><td>已提交的数据库数据不受影响，缓存等 TTL 到期或下次同步恢复</td></tr>
+    <tr><td>删缓存（delete）</td><td>重试 1 次后跳过</td><td>旧缓存最长存活到自身 TTL 到期，此取舍已记录</td></tr>
+  </tbody>
+</table>
+
+<h4>故障演练的实测数据（《测试报告》§三）</h4>
+<table>
+  <thead><tr><th>场景</th><th>观测结果</th></tr></thead>
+  <tbody>
+    <tr><td>Redis 挂起（连接黑洞），首个未命中请求</td><td>3.4 秒（建连与命令超时的有界代价）</td></tr>
+    <tr><td>熔断打开后</td><td>同路径延迟降到 7~8 毫秒（对比无熔断时的 60 秒级挂起）</td></tr>
+    <tr><td>故障期间 15 个同键并发请求</td><td>数据库回源仅 1 次（防击穿生效，见 8.3）</td></tr>
+    <tr><td>故障期间提交选课</td><td>成功，256 毫秒（写路径不受影响）</td></tr>
+    <tr><td>故障恢复（黑洞换成真实 Redis 的转发器）</td><td>10 秒后半开探测成功，2 次探测后关闭；L2 重新回填（8 毫秒命中）</td></tr>
+  </tbody>
+</table>
+
+<h3>8.3 第三道：缓存击穿防护（两级）</h3>
+<div class="term"><b>击穿</b>：某个热点缓存键失效的瞬间，大量并发请求同时发现缓存为空，一起去查数据库，瞬时压力全部落到数据库。</div>
+<p>两级防护把"同键的 N 个并发回源"压缩成 1 次实际数据库查询：</p>
+<ol>
+  <li><b>进程内单飞（SingleFlight）</b>：同一进程内，相同键的并发请求只放行一个去查数据库，其余等待它把结果写回缓存后直接取用；等待预算 6 秒，超时按失败处理且不缓存失败结果。</li>
+  <li><b>分布式回源锁（CacheLoadLock）</b>：多实例部署时，跨进程用 Redis 锁保证同一键同一时刻只有一个实例回源。加锁用 <code>SET NX PX</code>，释放时用 Lua 脚本校验持锁者身份再删除，防止误删他人的锁；Redis 异常时一律按"没抢到锁"处理，退化为允许回源（可用性优先）。</li>
+</ol>
+<div class="term"><b>SET NX</b>：Redis 的"键不存在才写入"命令，天然适合做互斥锁。<b>Lua 脚本</b>：Redis 支持的一小段原子执行的脚本，保证"检查 + 删除"两步不可拆分。</div>
+
+<h3>8.4 第四道：防护状态本身可观测</h3>
+<p>Redis 降级次数（<code>hercules_cache_redis_degraded</code>）与熔断状态（<code>hercules_cache_redis_circuit_state</code>）都作为指标暴露，运行期可以随时确认防护是否触发、当前处于哪个状态。</p>
+</section>
+
+<!-- ================= 9 日志 ================= -->
+<section id="logging">
+<h2><span class="no">9</span>日志与可观测</h2>
+
+<div class="term"><b>traceId</b>：一次请求的唯一编号。它出现在这条请求产生的每一行日志里，把分散在网关、应用、同步链多个环节的日志串起来，故障时按编号检索即可还原完整路径。</div>
+
+<h3>9.1 traceId 的贯通路径</h3>
+<div class="flow">
+  <div class="fstep"><b>1</b>网关：取上游请求头中的 X-Trace-Id（有则复用），没有则生成 16 位短 ID</div>
+  <div class="farrow">↓</div>
+  <div class="fstep"><b>2</b>网关：ID 写入转发给应用的请求头，同时写入返回给客户端的响应头</div>
+  <div class="farrow">↓</div>
+  <div class="fstep"><b>3</b>应用：过滤器（最高优先级，先于安全链执行）从请求头取出 ID，写入日志上下文 MDC</div>
+  <div class="farrow">↓</div>
+  <div class="fstep"><b>4</b>此后该线程的每行日志自动携带 ID（日志格式中的 <code>%X{traceId}</code>）；事务提交后的同步链消费在同一线程执行，日志同样携带</div>
+</div>
+<div class="term"><b>MDC</b>：日志框架提供的"按线程存放上下文"的机制，配置一次输出格式，线程内所有日志自动带上。</div>
+
+<h3>9.2 日志文件布局</h3>
+<table>
+  <thead><tr><th>通道</th><th>文件与滚动策略</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>控制台 + 主日志</td>
+      <td>按天且按 100MB 滚动，保留 30 天或 1~2GB，UTF-8 显式声明</td>
+      <td>常规业务日志，经异步输出</td>
+    </tr>
+    <tr>
+      <td>认证审计（独立文件 <code>auth-audit.log</code>，保留 90 天）</td>
+      <td>独立滚动，独立保留期</td>
+      <td>登录成功 / 登录失败（记录用户名、IP、失败原因，<b>不含密码</b>）/ 登出 / 黑名单拒绝</td>
+    </tr>
+  </tbody>
+</table>
+<p>主日志经异步输出：日志先进入容量 4096 的内存队列，由独立线程写盘。高并发（如压测）时日志写入不阻塞业务线程；容器环境挂载持久卷，重启不丢日志。</p>
+
+<h3>9.3 指标出口</h3>
+<ul>
+  <li><code>hercules_cache_*</code>：L1/L2 命中与未命中、数据库回源、Redis 降级、熔断状态；</li>
+  <li><code>hercules_sync_*</code>：版本应用数、冲突数；</li>
+  <li>全部经 <code>/actuator/prometheus</code> 暴露；Grafana 的大盘（8 个面板：应用与网关 QPS、P95/P99 延迟、错误率、缓存命中、同步链、熔断状态、JVM 堆、线程池）实时显示。</li>
+</ul>
+
+<h3>9.4 敏感信息红线</h3>
+<p>成文约束（《日志设计.md》）：密码、令牌、密钥、SQL 参数一律不写入日志。审计事件固定记录用户名与 IP，不记录凭据。</p>
+</section>
+
+<!-- ================= 10 数据库与 API ================= -->
+<section id="data-api">
+<h2><span class="no">10</span>数据库与 API</h2>
+
+<h3>10.1 数据表</h3>
+<table>
+  <thead><tr><th>表</th><th>用途</th><th>关键字段</th><th>状态</th></tr></thead>
+  <tbody>
+    <tr><td><code>t_course</code></td><td>课程</td><td>课程编号（唯一）、名称、学分、容量、已选人数、上课时间与先修课（JSON 文本）</td><td>使用中</td></tr>
+    <tr><td><code>t_enrollment</code></td><td>选课记录</td><td>学生 ID、课程 ID、状态（0 预选 / 1 已选 / 2 退选）</td><td>使用中</td></tr>
+    <tr><td><code>t_user</code></td><td>用户</td><td>用户名（唯一）、BCrypt 密码、角色（STUDENT / ADMIN）、学号</td><td>使用中</td></tr>
+    <tr><td><code>t_cache_version</code></td><td>缓存版本</td><td>缓存键（唯一）、节点名、当前版本号、向量时钟 JSON</td><td>使用中（同步链判定依据）</td></tr>
+    <tr><td><code>t_repair_log</code></td><td>修复日志</td><td>差异两端值、冲突类型、补偿 SQL、修复状态</td><td>占位（阶段 C 启用）</td></tr>
+    <tr><td><code>t_agent_trace</code></td><td>智能体调用记录</td><td>traceId、会话、输入输出、模型、耗时</td><td>占位（阶段 D 启用）</td></tr>
+  </tbody>
+</table>
+
+<h3>10.2 种子数据</h3>
+<p>应用启动时自动幂等写入（已存在则跳过）：50 门课程、20 名教师、演示账号 <code>admin/admin123</code> 与 <code>st001~003/123456</code>（BCrypt 密文在启动时现场生成，不在代码中存静态密文）。压测环境通过开关扩至 5000 门压测课程（容量 10 万/门，避免写路径触发"已满"冲突）与 60 个登录账号。</p>
+
+<h3>10.3 API 一览</h3>
+<table>
+  <thead><tr><th>方法</th><th>路径</th><th>说明</th><th>权限</th></tr></thead>
+  <tbody>
+    <tr><td>POST</td><td><code>/api/v1/auth/login</code></td><td>登录，返回令牌对</td><td>公开</td></tr>
+    <tr><td>POST</td><td><code>/api/v1/auth/refresh</code></td><td>旋转式刷新令牌</td><td>公开</td></tr>
+    <tr><td>POST</td><td><code>/api/v1/auth/logout</code></td><td>登出：jti 入黑名单，吊销 Refresh</td><td>登录</td></tr>
+    <tr><td>GET</td><td><code>/api/v1/courses?page=&amp;size=&amp;keyword=</code></td><td>课程分页与关键字检索（走多级缓存）</td><td>登录</td></tr>
+    <tr><td>GET</td><td><code>/api/v1/courses/{id}</code></td><td>课程详情（纳入向量时钟版本链）</td><td>登录</td></tr>
+    <tr><td>POST</td><td><code>/api/v1/enrollment</code></td><td>选课（请求体只含 courseId，studentId 取自令牌）</td><td>STUDENT</td></tr>
+    <tr><td>DELETE</td><td><code>/api/v1/enrollment?courseId=</code></td><td>退课</td><td>STUDENT</td></tr>
+    <tr><td>GET</td><td><code>/api/v1/enrollment/mine</code></td><td>本人选课记录</td><td>STUDENT</td></tr>
+    <tr><td>GET</td><td><code>/api/v1/cache/stats</code></td><td>命中率、各级命中、同步与冲突计数</td><td>ADMIN</td></tr>
+    <tr><td>POST</td><td><code>/api/v1/debug/simulate-conflict</code></td><td>模拟双节点并发写冲突（演示用）</td><td>ADMIN</td></tr>
+    <tr><td>POST</td><td><code>/api/v1/debug/evict-local?key=</code></td><td>手动失效 L1，演示 L2 回填（演示用）</td><td>ADMIN</td></tr>
+    <tr><td>GET</td><td><code>/actuator/health</code> / <code>/actuator/prometheus</code></td><td>健康检查 / 指标端点</td><td>公开（白名单）</td></tr>
+  </tbody>
+</table>
+<p>除白名单（登录、刷新、健康、指标）外，所有接口需要 <code>Authorization: Bearer &lt;accessToken&gt;</code>。</p>
+</section>
+
+<!-- ================= 11 技术选型 ================= -->
+<section id="stack">
+<h2><span class="no">11</span>技术选型</h2>
+
+<h3>11.1 已使用组件</h3>
+<table>
+  <thead><tr><th>组件</th><th>版本</th><th>在本项目中的用途</th><th>选择原因</th></tr></thead>
+  <tbody>
+    <tr><td>Java</td><td>21</td><td>开发语言（运行于 JDK 25）</td><td>LTS 长期支持版本，与 Spring Boot 3.x 兼容</td></tr>
+    <tr><td>Spring Boot</td><td>3.5.16</td><td>Web、参数校验、监控端点</td><td>Java 后端的主流框架，生态与文档完整</td></tr>
+    <tr><td>MyBatis-Plus</td><td>3.5.17</td><td>数据库访问：对象与 SQL 映射、分页、条件构造</td><td>减少重复的模板 SQL 代码，分页插件成熟</td></tr>
+    <tr><td>MySQL</td><td>8.x</td><td>业务库，唯一数据事实来源</td><td>关系型数据库标准选型；连接串自动建库、脚本幂等初始化</td></tr>
+    <tr><td>Caffeine</td><td>3.2.x</td><td>L1 进程内缓存，支持按键设置过期时间</td><td>Java 进程内缓存的主流实现，内置高效淘汰策略</td></tr>
+    <tr><td>Redis（Lettuce 客户端）</td><td>7 / 6.6</td><td>L2 分布式缓存，仅使用 GET / SET EX / DEL 基础命令</td><td>只用最基础命令，降低依赖面与故障排查复杂度</td></tr>
+    <tr><td>Resilience4j</td><td>2.4.0</td><td>Redis 调用的熔断器</td><td>轻量、程序化配置，与 Micrometer 集成直接</td></tr>
+    <tr><td>Spring Security + jjwt</td><td>6.5 / 0.13.0</td><td>认证、鉴权、令牌签发与验证</td><td>Spring 生态标准安全框架；jjwt 负责 JWT 生成与验签</td></tr>
+    <tr><td>Micrometer + Prometheus registry</td><td>1.15.x</td><td>指标采集与暴露</td><td>Spring Boot 官方监控门面，切换后端不需要改业务代码</td></tr>
+    <tr><td>H2</td><td>2.3.x</td><td>仅测试用：MySQL 兼容模式的内存数据库</td><td>单元测试不需要安装任何中间件，任何机器可直接运行</td></tr>
+  </tbody>
+</table>
+
+<h3>11.2 规划引入组件</h3>
+<table>
+  <thead><tr><th>组件</th><th>阶段</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td>Canal + RocketMQ</td><td>阶段 B</td><td>真实 Binlog 同步链：监听数据库变更，经消息队列异步刷新缓存（写路径削峰）</td></tr>
+    <tr><td>Spring AI</td><td>阶段 D</td><td>四类智能体（路由 / 推荐 / 排课冲突 / 执行）的模型接入与编排</td></tr>
+    <tr><td>Milvus + Neo4j</td><td>阶段 E</td><td>向量检索（课程语义搜索）与图检索（先修课、培养方案关系）</td></tr>
+    <tr><td>Vue 3 + Element Plus + ECharts</td><td>阶段 G</td><td>学生端对话助手与治理驾驶舱界面</td></tr>
+  </tbody>
+</table>
+
+<h3>11.3 部署形态的决策变更记录</h3>
+<p>部署方案在开发过程中反转过一次，过程如下（详见《工作日志》决策记录）：</p>
+<ol>
+  <li>起步文档按容器化选型（Canal / RocketMQ / Milvus / Prometheus 均以 Docker 运行）；</li>
+  <li>2026-09-05：本机确认无法安装 Docker，全线改为 Windows 原生与嵌入式方案（嵌入式 Binlog 连接器、嵌入式向量检索、原生部署）；</li>
+  <li>2026-09-07：找到 WSL2 的安装方法，<b>Docker 回归</b>，选型恢复起步文档口径；此前的嵌入式方案降级为"单机形态"备选，保留作为论文中的选型对比素材。</li>
+</ol>
+<div class="term"><b>WSL2</b>：Windows 内置的 Linux 子系统，可在其中运行完整的 Linux 环境与 Docker，解决 Windows 上无法直接安装 Docker 的问题。</div>
+<p>当前部署形态：Windows + WSL2 + Docker Compose，共六个容器（MySQL、Redis、应用、网关、Prometheus、Grafana），镜像走国内加速前缀可配置替换。</p>
+</section>
+
+<!-- ================= 12 测试与压测 ================= -->
+<section id="testing">
+<h2><span class="no">12</span>测试、压测与路线图</h2>
+
+<h3>12.1 自动化测试（53/53 通过）</h3>
+<p>单元测试用 H2 内存数据库和内存桩替代外部中间件，不依赖本机 MySQL/Redis，任何环境可直接运行：</p>
+<table>
+  <thead><tr><th>模块</th><th>数量</th><th>覆盖点（举例）</th></tr></thead>
+  <tbody>
+    <tr><td>hercules-cache</td><td>21</td><td>三级读路径回源回填、50 线程并发击穿合并为 1 次回源、熔断状态迁移、分布式锁互斥、逐键 TTL</td></tr>
+    <tr><td>hercules-sync</td><td>19</td><td>向量时钟判定全分支、并发冲突 LWW 合并、幂等丢弃、JSON 序列化往返</td></tr>
+    <tr><td>hercules-application</td><td>13</td><td>端到端冒烟（登录 → 查询 → 选课 → 冲突合并 → 退课 → 指标）、认证全流程（错误密码 401、越权 403、旋转刷新、登出黑名单）</td></tr>
+  </tbody>
+</table>
+
+<h3>12.2 阶梯压测（500 并发，经网关，《测试报告》§6.2）</h3>
+<p>方法：JMeter 5.6.2 无头模式，双线程组建模流量比例（读 70% / 写 30%），从网关 8081 打入，Docker 五容器被测栈；并发从 100 阶梯升至 500。</p>
+<table>
+  <thead><tr><th>级别</th><th>并发（读/写线程）</th><th>稳态时长</th><th>总请求</th><th>吞吐 req/s</th><th>均值延迟</th><th>P95</th><th>错误</th></tr></thead>
+  <tbody>
+    <tr><td>L1</td><td>100（70/30）</td><td>3 分钟</td><td>729,677</td><td>4,051</td><td>22.6ms</td><td>106ms</td><td>0</td></tr>
+    <tr><td>L2</td><td>300（210/90）</td><td>5 分钟</td><td>1,390,183</td><td>4,630</td><td>61.5ms</td><td>249ms</td><td>0</td></tr>
+    <tr><td>L3</td><td>500（350/150）</td><td>10 分钟</td><td>3,018,549</td><td><b>5,027</b></td><td>96.9ms</td><td>170ms</td><td>20（0.0007%）</td></tr>
+  </tbody>
+</table>
+<div class="term"><b>P95</b>：把全部请求按耗时从低到高排序，95% 的请求不慢于该值。它比平均值更能反映慢请求的实际情况。</div>
+
+<p>L3 级别按端点拆分：</p>
+<table>
+  <thead><tr><th>端点</th><th>请求数</th><th>错误</th><th>均值</th><th>P95</th><th>P99</th></tr></thead>
+  <tbody>
+    <tr><td>课程列表（读）</td><td>1,440,898</td><td>0</td><td>72ms</td><td>126ms</td><td>300ms</td></tr>
+    <tr><td>课程详情（读）</td><td>1,440,730</td><td>0</td><td>70ms</td><td>119ms</td><td>155ms</td></tr>
+    <tr><td>选课（写）</td><td>136,921</td><td>20</td><td>641ms</td><td>1651ms</td><td>2239ms</td></tr>
+  </tbody>
+</table>
+
+<h3>12.3 瓶颈定位与调优（A/B 对比，《测试报告》§6.6）</h3>
+<p>L3 的 20 个错误全部为同一种：数据库连接池获取连接超时。日志证据 <code>waiting=116</code>——150 个写并发把 20 个连接全部占满，排队超过 3 秒的请求按超时设计快速失败。据此做了参数调整（注意：多项变更同时进行）：</p>
+<table>
+  <thead><tr><th>对象</th><th>基线</th><th>调优后</th></tr></thead>
+  <tbody>
+    <tr><td>数据库连接池</td><td>20 连接</td><td><b>40 连接</b>（对症瓶颈）</td></tr>
+    <tr><td>应用 JVM</td><td>全部默认（自适应上限 4GB）</td><td>固定 Xms1g / Xmx2g，G1 停顿目标 50ms，GC 日志落盘</td></tr>
+    <tr><td>网关 JVM / 容器限额</td><td>默认 / 无限制</td><td>512MB 堆；应用容器限 3GB，网关限 1GB</td></tr>
+  </tbody>
+</table>
+<p>同参数复跑 500 并发 10 分钟的结果：</p>
+<table>
+  <thead><tr><th>指标</th><th>基线</th><th>调优后</th><th>变化</th></tr></thead>
+  <tbody>
+    <tr><td>错误</td><td>20（连接超时）</td><td><b>0</b></td><td>写路径可靠性问题根治</td></tr>
+    <tr><td>写吞吐</td><td>228/s</td><td><b>424/s</b></td><td><b>+86%</b></td></tr>
+    <tr><td>写 P95</td><td>1651ms</td><td><b>513ms</b></td><td><b>-69%</b></td></tr>
+    <tr><td>总吞吐</td><td>5,027/s</td><td>4,317/s</td><td>-14%</td></tr>
+    <tr><td>读吞吐（两读端点合计）</td><td>4,802/s</td><td>3,894/s</td><td>-19%（原因待单变量实验，已如实记录）</td></tr>
+    <tr><td>应用 GC</td><td>未记录</td><td>695 次 Young / 0 次 Full / 总耗时 0.76%</td><td>可排除应用垃圾回收为瓶颈</td></tr>
+  </tbody>
+</table>
+<div class="term"><b>GC（垃圾回收）</b>：Java 虚拟机自动清理不再使用的内存的过程，回收期间程序会短暂暂停（STW），暂停过频会影响延迟。<b>单变量实验</b>：一次只改一个参数再做对比，用于确定因果。</div>
+
+<div class="note"><b>口径声明</b>：压测机与被测系统在同一台物理机（Windows + WSL2）。5,027 req/s 包含 JMeter 客户端与宿主资源的封顶效应，用于阶梯对比与瓶颈定位是有效的，但<b>不能</b>外推为服务端集群的容量上限。容器 CPU 采样显示服务端合计约 8/12 逻辑核，并非 CPU 饱和。写路径的治本方案（选课事务异步化削峰）归入阶段 B 的 RocketMQ 改造。</div>
+
+<h3>12.4 路线图与当前进度</h3>
+<table>
+  <thead><tr><th>阶段</th><th>内容</th><th>状态</th></tr></thead>
+  <tbody>
+    <tr><td>阶段 0</td><td>MVP 纵向切片：多级缓存 + 向量时钟同步链 + 防超选，35 项测试</td><td><span class="badge ok">已完成</span></td></tr>
+    <tr><td>阶段 A</td><td>Maven 多模块化重构（11 模块）</td><td><span class="badge ok">已完成</span></td></tr>
+    <tr><td>阶段 A+</td><td>高可用加固（超时 / 熔断 / 防击穿）、双 Token 认证、日志体系，53 项测试</td><td><span class="badge ok">已完成</span></td></tr>
+    <tr><td>阶段 H-1~H-4</td><td>WSL2/Docker 全栈部署、最小网关、JMeter 500 并发阶梯压测与调优</td><td><span class="badge ok">已完成</span></td></tr>
+    <tr><td>阶段 B</td><td>真实 Binlog 同步链（Canal + RocketMQ 容器版，写路径异步化削峰）</td><td><span class="badge plan">下一步</span></td></tr>
+    <tr><td>阶段 C</td><td>巡检引擎 + 补偿 SQL 自愈（hercules-inspector）</td><td><span class="badge plan">规划中</span></td></tr>
+    <tr><td>阶段 D</td><td>Spring AI 多智能体（路由 / 推荐 / 排课冲突 / 执行）</td><td><span class="badge plan">规划中</span></td></tr>
+    <tr><td>阶段 E</td><td>RAG（Milvus 向量检索 + Neo4j 图检索）</td><td><span class="badge plan">规划中</span></td></tr>
+    <tr><td>阶段 F</td><td>可观测性完善（链路追踪对接、大盘补充）</td><td><span class="badge plan">规划中</span></td></tr>
+    <tr><td>阶段 G</td><td>Vue3 双端前端（设计文档已就绪，编码未开始）</td><td><span class="badge plan">规划中</span></td></tr>
+    <tr><td>阶段 H-5</td><td>压测报告归档收尾、读路径 -19% 的单变量归因实验（可选）</td><td><span class="badge plan">规划中</span></td></tr>
+  </tbody>
+</table>
+
+<h3>12.5 已记录的遗留问题</h3>
+<ul>
+  <li>重复选课无约束：应用层与 <code>t_enrollment</code> 表均未拦截同一学生重复选同一门课；</li>
+  <li>分页参数无上限校验：过大的 <code>size</code> 可单页拉取全表；</li>
+  <li><code>t_cache_version</code> 的更新在多实例部署时需要加锁（当前单实例安全）；</li>
+  <li>500 错误响应携带原始异常消息，上线前需收敛为通用提示；</li>
+  <li>冲突合并的旧值依赖 L2，L2 逐出后退化为整体采用新值（见 5.4）。</li>
+</ul>
+</section>
+
+<!-- ================= 附录 ================= -->
+<section id="sources">
+<h2><span class="no">附</span>资料来源</h2>
+<p>本文内容与全部数字整理自以下项目文档，具体数值可在对应章节复核：</p>
+<table>
+  <thead><tr><th>文档</th><th>本文引用的章节</th></tr></thead>
+  <tbody>
+    <tr><td><code>README.md</code></td><td>第 1、10 章（项目定位、API 清单）</td></tr>
+    <tr><td><code>开发文档/起步文档.md</code></td><td>第 2 章（四层架构、量化目标）</td></tr>
+    <tr><td><code>开发文档/包结构说明.md</code></td><td>第 3、4、5 章（模块与类的职责）</td></tr>
+    <tr><td><code>开发文档/认证设计.md</code></td><td>第 7 章（令牌规范、Redis 键、越权收敛）</td></tr>
+    <tr><td><code>开发文档/日志设计.md</code></td><td>第 9 章（文件布局、审计、红线）</td></tr>
+    <tr><td><code>开发文档/测试报告.md</code></td><td>第 8、12 章（故障演练 §三、压测 §6.2~6.6）</td></tr>
+    <tr><td><code>开发文档/工作日志.md</code></td><td>第 5、6、11 章（机制实现细节、决策记录、遗留问题）</td></tr>
+    <tr><td><code>开发文档/项目介绍.md</code></td><td>第 1 章（量化数字出处索引）</td></tr>
+  </tbody>
+</table>
+<footer>
+  <p>Hercules 项目讲解 · 依据 2026-09-07 代码基线（commit <code>aaea17e</code>）整理 · 单文件网页，可离线打开与打印。</p>
+</footer>
+</section>
+
+</main>
+</div>
+</body>
+</html>

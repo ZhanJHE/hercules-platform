@@ -33,9 +33,13 @@ public class HerculesSyncProperties {
     /**
      * 覆盖本节点标识。
      *
-     * @param nodeId 节点标识（对应配置项 hercules.sync.node-id），不应为空白
+     * @param nodeId 节点标识（对应配置项 hercules.sync.node-id），不允许为 null 或空白
+     * @throws IllegalArgumentException nodeId 为空白时抛出（配置绑定阶段即失败，拒绝带错误配置启动）
      */
     public void setNodeId(String nodeId) {
+        if (nodeId == null || nodeId.isBlank()) {
+            throw new IllegalArgumentException("hercules.sync.node-id 不允许为空白");
+        }
         this.nodeId = nodeId;
     }
 
@@ -51,9 +55,13 @@ public class HerculesSyncProperties {
     /**
      * 覆盖时钟最大节点数阈值。
      *
-     * @param maxNodes 阈值（节点个数，对应配置项 hercules.sync.max-nodes），应为正数
+     * @param maxNodes 阈值（节点个数，对应配置项 hercules.sync.max-nodes），必须为正数
+     * @throws IllegalArgumentException maxNodes 小于 1 时抛出（配置绑定阶段即失败，拒绝带错误配置启动）
      */
     public void setMaxNodes(int maxNodes) {
+        if (maxNodes < 1) {
+            throw new IllegalArgumentException("hercules.sync.max-nodes 必须 >= 1，实际值: " + maxNodes);
+        }
         this.maxNodes = maxNodes;
     }
 }

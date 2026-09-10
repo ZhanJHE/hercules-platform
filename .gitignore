@@ -9,6 +9,7 @@
 # --- 日志与运行时产物 ---
 *.log
 *.pid
+**/logs/
 
 # --- JMeter 压测本地产物（数字已写入 开发文档/测试报告.md §六，不入库） ---
 hercules-platform/loadtest/jmeter-runtime/

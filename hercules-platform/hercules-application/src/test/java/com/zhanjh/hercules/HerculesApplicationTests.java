@@ -29,14 +29,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>认证说明：各用例先经 /api/v1/auth/login 获取真实 JWT（st001 学生 / admin 管理员，
  * 种子账号由 AuthUserSeeder 写入 H2），请求统一携带 Authorization: Bearer。
  *
- * <p>场景清单（@Order 1-6）：
+ * <p>场景清单（@Order 0-9）：
  * <ol>
  *   <li>未登录 401 + 登录成功 + 种子课程 50 条；</li>
  *   <li>二次列表 L1 命中（dbLoad 不变）+ stats 含熔断状态字段（admin）；</li>
  *   <li>选课后 enrolled 87→88（AFTER_COMMIT 刷缓存）；</li>
  *   <li>simulate-conflict 字段级 LWW 合并（admin 触发，保留 enrolled=88）；</li>
  *   <li>退课产生支配版本（87、原名）；</li>
- *   <li>课程 39 容量 150/已选 147，同一学生连选 3 次后第 4 次 409。</li>
+ *   <li>课程 39 容量 150/已选 147：st001~st003 各选一门填满（唯一键下每人限选一门），
+ *       st004 第 4 人 → 409 容量已满；</li>
+ *   <li>重复选课约束：已选 st003 再选课程 39 → 409 请勿重复选课（守卫先于容量判定）；</li>
+ *   <li>退选后再选：st001 重选课程 1 → 原地复活同一行（id 与首次一致），
+ *       enrolled 88，/mine 中课程 1 仅一条记录（uk_student_course）；</li>
+ *   <li>分页边界：page=0 / size=0 / size=1000 → 400；size=100 → 200。</li>
  * </ol>
  *
  * @author zhanjh
@@ -52,6 +57,10 @@ class HerculesApplicationTests {
     /** MockMvc：以模拟 HTTP 请求驱动控制器（含 Security 过滤器链）。 */
     @Autowired
     private MockMvc mvc;
+
+    /** st001 首次选课程 1 的记录 id：Order 8 断言「退选后再选」原地复活同一行（id 不变）。
+     *  static：JUnit 默认每个测试方法新建实例，跨方法传递状态必须用静态字段。 */
+    private static long st001Course1EnrollmentId;
 
     /**
      * 以演示账号登录并返回 accessToken。
@@ -135,14 +144,16 @@ class HerculesApplicationTests {
     @Order(3)
     void enrollmentUpdatesDbAndSyncRefreshesCache() throws Exception {
         String token = login("st001", "123456");
-        mvc.perform(post("/api/v1/enrollment")
+        MvcResult enrollResult = mvc.perform(post("/api/v1/enrollment")
                         .header("Authorization", "Bearer " + token)
                         .contentType("application/json")
                         .content("{\"courseId\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.status").value(1))
-                .andExpect(jsonPath("$.data.studentId").value(20240001)); // studentId 取自 token
+                .andExpect(jsonPath("$.data.studentId").value(20240001)) // studentId 取自 token
+                .andReturn();
+        st001Course1EnrollmentId = readLong(enrollResult, "$.data.id");
 
         mvc.perform(get("/api/v1/courses/1").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
@@ -193,27 +204,109 @@ class HerculesApplicationTests {
     }
 
     /**
-     * 验证点（防超选）：课程 39（GE202）容量 150、已选 147，同一学生连选 3 次后
-     * 第 4 次返回 409（认证后 studentId 取自 token，同一账号重复选课由容量约束兜底）。
+     * 验证点（防超选 + 重复选课约束下的容量语义）：课程 39（GE202）容量 150、已选 147，
+     * 3 个余量由 st001~st003 各选一门填满（uk_student_course 唯一键下每人限选一门），
+     * 第 4 名学生 st004 选课 → 409「课程容量已满」（increaseEnrolled 0 行受影响的容量分支）。
      */
     @Test
     @Order(6)
     void enrollmentRejectsWhenCourseIsFull() throws Exception {
-        String token = login("st002", "123456");
-        for (int i = 0; i < 3; i++) {
+        for (String student : new String[]{"st001", "st002", "st003"}) {
             mvc.perform(post("/api/v1/enrollment")
-                            .header("Authorization", "Bearer " + token)
+                            .header("Authorization", "Bearer " + login(student, "123456"))
                             .contentType("application/json")
                             .content("{\"courseId\":39}"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(0));
         }
         mvc.perform(post("/api/v1/enrollment")
-                        .header("Authorization", "Bearer " + token)
+                        .header("Authorization", "Bearer " + login("st004", "123456"))
                         .contentType("application/json")
                         .content("{\"courseId\":39}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(409));
+                .andExpect(jsonPath("$.code").value(409))
+                .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("课程容量已满")));
+    }
+
+    /**
+     * 验证点（重复选课约束）：已持有课程 39 有效选课记录的 st003 再次选同一门课 →
+     * 409「请勿重复选课」——守卫先于容量判定（此时课程已满，但拦截原因是重复而非容量）。
+     */
+    @Test
+    @Order(7)
+    void duplicateEnrollmentIsRejected() throws Exception {
+        mvc.perform(post("/api/v1/enrollment")
+                        .header("Authorization", "Bearer " + login("st003", "123456"))
+                        .contentType("application/json")
+                        .content("{\"courseId\":39}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(409))
+                .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("请勿重复选课")));
+    }
+
+    /**
+     * 验证点（退选后再选，遗留事项清理核心语义）：st001 重选课程 1（Order 5 已退选）→
+     * 原地复活 Order 3 创建的同一行（id 一致，不新增行）、enrolled 87→88；
+     * /mine 中课程 1 仅一条记录（uk_student_course：每对学生-课程至多一行）。
+     */
+    @Test
+    @Order(8)
+    void reEnrollAfterWithdrawReactivatesSameRow() throws Exception {
+        String token = login("st001", "123456");
+        MvcResult enrollResult = mvc.perform(post("/api/v1/enrollment")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/json")
+                        .content("{\"courseId\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value(1))
+                .andReturn();
+        // 原地复活：返回的记录 id 与首次选课一致（若插入新行则 id 必然不同）
+        assertThat(readLong(enrollResult, "$.data.id")).isEqualTo(st001Course1EnrollmentId);
+
+        mvc.perform(get("/api/v1/courses/1").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.enrolled").value(88));
+
+        // st001 现有两条流水：课程 1（复活）+ 课程 39（Order 6），课程 1 不因重选产生第二条
+        MvcResult mine = mvc.perform(get("/api/v1/enrollment/mine")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andReturn();
+        com.fasterxml.jackson.databind.JsonNode rows =
+                com.zhanjh.hercules.common.JsonUtil.mapper().readTree(mine.getResponse().getContentAsString())
+                        .at("/data");
+        long courseOneRows = 0;
+        for (com.fasterxml.jackson.databind.JsonNode row : rows) {
+            if (row.at("/courseId").asLong() == 1L) {
+                courseOneRows++;
+            }
+        }
+        assertThat(courseOneRows).isEqualTo(1);
+    }
+
+    /**
+     * 验证点（分页边界校验，遗留事项清理）：page/size 越界 → 400；
+     * 边界内最大 size=100 正常返回（种子 50 条全量）。
+     */
+    @Test
+    @Order(9)
+    void paginationBoundsAreValidated() throws Exception {
+        String admin = login("admin", "admin123");
+        mvc.perform(get("/api/v1/courses").param("page", "0").param("size", "10")
+                        .header("Authorization", "Bearer " + admin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+        mvc.perform(get("/api/v1/courses").param("page", "1").param("size", "0")
+                        .header("Authorization", "Bearer " + admin))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/courses").param("page", "1").param("size", "1000")
+                        .header("Authorization", "Bearer " + admin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("size")));
+        mvc.perform(get("/api/v1/courses").param("page", "1").param("size", "100")
+                        .header("Authorization", "Bearer " + admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(50));
     }
 
     /**

@@ -38,7 +38,7 @@ services:
         BASE_IMAGE: ${DOCKER_MIRROR:-docker.m.daocloud.io}/library/eclipse-temurin:21-jre
     container_name: hercules-app
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hercules?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hercules?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&rewriteBatchedStatements=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root123
       SPRING_DATA_REDIS_HOST: redis

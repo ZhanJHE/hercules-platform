@@ -14,6 +14,7 @@ import com.zhanjh.hercules.sync.model.VersionedValue;
 import com.zhanjh.hercules.sync.resolver.ConflictMergeStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -160,15 +161,23 @@ public class VersionChangeConsumer {
     }
 
     /**
-     * 新增或更新 t_cache_version 版本记录（以 cache_key 为唯一业务键）。
+     * 新增或更新 t_cache_version 版本记录（以 cache_key 为唯一业务键，乐观锁收敛并发）。
      *
-     * <p>实现要点：insert 时 currentVersion 从 1 起算；update 时 currentVersion 原值 + 1、
-     * nodeId 覆盖为最新写入节点、update_time 刷新为当前时间（该字段同时充当下次冲突合并
-     * 的旧值 LWW 时间戳）。写入前检查时钟分量数，超过 hercules.sync.max-nodes（默认 10）
-     * 打 warn——对应风险 R-03：节点数无上限增长会膨胀 vector_clock_json 并拖慢比较，规划归档收敛。</p>
+     * <p>实现要点：insert 时 currentVersion 从 1 起算；update 时经
+     * {@link CacheVersionMapper#updateVersionRow} 以 current_version 作乐观锁条件
+     * （WHERE current_version = 期望值，SET current_version = 原值 + 1）、nodeId 覆盖为最新
+     * 写入节点、update_time 刷新为当前时间（该字段同时充当下次冲突合并的旧值 LWW 时间戳）。</p>
+     *
+     * <p>并发收敛（遗留事项清理）：insert 捕获 uk_cache_key 唯一键冲突（多实例并发首写）→
+     * 重查后转乐观锁更新；乐观锁竞争失败（0 行，多实例并发更新同键）→ 重查重试一次；
+     * 仍失败则放弃本次时钟持久化并记 warn——缓存值已应用，下一条消息会基于最新存量重新决策，
+     * 单实例串行消费（AFTER_COMMIT 同线程驱动）不会进入任何冲突分支。</p>
+     *
+     * <p>写入前后检查时钟分量数，超过 hercules.sync.max-nodes（默认 10）打 warn——对应风险
+     * R-03：节点数无上限增长会膨胀 vector_clock_json 并拖慢比较，规划归档收敛。</p>
      *
      * @param value        已决断要应用的版本化值（提供 cache_key 与最新 nodeId）
-     * @param stored       存量版本记录；null 表示首次应用需 insert，非 null 走 update
+     * @param stored       存量版本记录；null 表示首次应用需 insert，非 null 走乐观锁更新
      * @param clockToStore 待持久化的向量时钟（序列化为 vector_clock_json）
      */
     private void upsert(VersionedValue value, CacheVersion stored, VectorClock clockToStore) {
@@ -177,20 +186,62 @@ public class VersionChangeConsumer {
             log.warn("[hercules-sync] vector clock for key={} has {} nodes > max {} (R-03: consider archiving)",
                     value.key(), clockToStore.snapshot().size(), syncProps.getMaxNodes());
         }
+        String clockJson = clockToStore.toJson();
+        LocalDateTime now = LocalDateTime.now();
         if (stored == null) {
             CacheVersion row = new CacheVersion();
             row.setCacheKey(value.key());
             row.setNodeId(value.nodeId());
             row.setCurrentVersion(1L);
-            row.setVectorClockJson(clockToStore.toJson());
-            row.setUpdateTime(LocalDateTime.now());
-            cacheVersionMapper.insert(row);
-        } else {
-            stored.setNodeId(value.nodeId());
-            stored.setCurrentVersion(stored.getCurrentVersion() + 1);
-            stored.setVectorClockJson(clockToStore.toJson());
-            stored.setUpdateTime(LocalDateTime.now());
-            cacheVersionMapper.updateById(stored);
+            row.setVectorClockJson(clockJson);
+            row.setUpdateTime(now);
+            try {
+                cacheVersionMapper.insert(row);
+                return;
+            } catch (DuplicateKeyException e) {
+                // 多实例并发首写同键：唯一键冲突 → 重查存量行转乐观锁更新（单实例不会进入此分支）
+                CacheVersion latest = loadByKey(value.key());
+                if (latest == null || attemptUpdate(latest, value, clockJson, now)) {
+                    return;
+                }
+                log.warn("[hercules-sync] version row for key={} concurrently updated elsewhere; clock persist skipped this round",
+                        value.key());
+                return;
+            }
         }
+        if (attemptUpdate(stored, value, clockJson, now)) {
+            return;
+        }
+        // 乐观锁竞争失败（0 行）：重查后重试一次；仍失败则放弃本次持久化（缓存已应用，不回滚）
+        CacheVersion latest = loadByKey(value.key());
+        if (latest != null && attemptUpdate(latest, value, clockJson, now)) {
+            return;
+        }
+        log.warn("[hercules-sync] version row for key={} concurrently updated elsewhere; clock persist skipped this round",
+                value.key());
+    }
+
+    /**
+     * 按乐观锁条件尝试更新一行版本记录。
+     *
+     * @param row       持有主键与 current_version 期望值的存量记录
+     * @param value     待应用的版本化值（取最新 nodeId）
+     * @param clockJson 待持久化的向量时钟 JSON
+     * @param now       更新时间
+     * @return true-更新成功；false-版本已被并发方推进
+     */
+    private boolean attemptUpdate(CacheVersion row, VersionedValue value, String clockJson, LocalDateTime now) {
+        return cacheVersionMapper.updateVersionRow(row.getId(), row.getCurrentVersion(),
+                value.nodeId(), clockJson, now) > 0;
+    }
+
+    /**
+     * 按缓存键重查版本记录（乐观锁冲突重试时获取最新行）。
+     *
+     * @param key 缓存键
+     * @return 最新版本记录；行被并发删除等异常场景下可能为 null
+     */
+    private CacheVersion loadByKey(String key) {
+        return cacheVersionMapper.selectOne(new QueryWrapper<CacheVersion>().eq("cache_key", key));
     }
 }

@@ -9,9 +9,10 @@ import java.time.LocalDateTime;
 /**
  * 学生选课记录实体，对应起步文档 §5.1.2 的 t_enrollment 表。
  *
- * <p>状态机：0-预选 → 1-已选 → 2-退选（对应本类 STATUS_* 常量）。MVP 选课直接插入 STATUS_ENROLLED，
- * 预选态为后续「预选-转正」流程预留；退课不物理删除，把 status 置为 STATUS_WITHDRAWN 保留历史，
- * 重新选课插入新记录。选课/退课事务提交后由 EnrollmentService 发布 course:{id} 的版本化值刷新缓存，
+ * <p>状态机：0-预选 → 1-已选 → 2-退选（对应本类 STATUS_* 常量）。MVP 选课直接写入 STATUS_ENROLLED，
+ * 预选态为后续「预选-转正」流程预留；退课不物理删除，把 status 置为 STATUS_WITHDRAWN 保留最近一次流水；
+ * 表受 uk_student_course 唯一键约束（每对学生-课程至多一行），退选后再选为原地复活该行而非插入新行。
+ * 选课/退课事务提交后由 EnrollmentService 发布 course:{id} 的版本化值刷新缓存，
  * 本表自身不参与缓存版本链。
  *
  * <p>线程安全性：普通可变 POJO，仅在单请求作用域内使用。
@@ -28,7 +29,7 @@ public class Enrollment {
     /** 状态取值 1：已选（占坑生效），选课成功后的状态。 */
     public static final int STATUS_ENROLLED = 1;
 
-    /** 状态取值 2：退选（软删除标记），保留记录历史，不参与有效选课判定。 */
+    /** 状态取值 2：退选（软删除标记），保留最近一次流水，不参与有效选课判定。 */
     public static final int STATUS_WITHDRAWN = 2;
 
     /** 主键，数据库自增（t_enrollment.id，IdType.AUTO）。 */

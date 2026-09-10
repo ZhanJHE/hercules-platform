@@ -10,3 +10,6 @@ spring:
 hercules:
   auth:
     secret: "test-only-secret-for-hercules-jwt-signing-0123456789abcdef"
+    # 冒烟测试需要 4 个学生账号：课程 39（容量 150/已选 147，3 个余量）由 st001~st003 填满，
+    # 第 4 名学生 st004 触发「容量已满 409」，与「重复选课 409」形成可区分的两条路径
+    demo-student-count: 4

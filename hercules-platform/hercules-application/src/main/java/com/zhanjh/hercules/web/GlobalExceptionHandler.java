@@ -5,7 +5,7 @@ import com.zhanjh.hercules.common.R;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.converter.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -19,7 +19,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *   <li>MethodArgumentNotValidException —— @Valid 请求体校验失败：固定 400，message 取第一条字段错误的 defaultMessage，
  *       无字段错误时回退为「参数校验失败」；</li>
  *   <li>HttpMediaTypeNotSupportedException —— Content-Type 与请求体不符：415（防止落入 500 兜底暴露内部细节）；</li>
- *   <li>Exception —— 未预期异常：记录 ERROR 级堆栈后返回 500 与「服务内部错误: 原始消息」。</li>
+ *   <li>Exception —— 未预期异常：记录 ERROR 级堆栈后返回 500 与固定文案（遗留事项清理：
+ *       不再携带原始异常消息，防止内部细节如 SQL 片段、类名经响应体外泄；traceId 在日志行内可回溯）。</li>
  * </ul>
  *
  * <p>处理器为无状态单例（仅持有静态 final Logger），线程安全。
@@ -73,14 +74,15 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 兜底处理所有未被上方分支匹配的异常：记录 ERROR 级堆栈便于排查，向调用方返回 500 与简化后的错误消息。
+     * 兜底处理所有未被上方分支匹配的异常：记录 ERROR 级堆栈（含 traceId）便于排查，
+     * 向调用方返回 500 与固定文案——不携带 e.getMessage()，避免内部细节（SQL、类名、路径等）外泄。
      *
      * @param e 任意未在上方分支处理的异常
-     * @return HTTP 500、code=500、message 为「服务内部错误: 原始异常消息」的响应体
+     * @return HTTP 500、code=500、message 为固定文案的响应体
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<R<Void>> handleUnknown(Exception e) {
         log.error("unexpected error", e);
-        return ResponseEntity.internalServerError().body(R.fail(500, "服务内部错误: " + e.getMessage()));
+        return ResponseEntity.internalServerError().body(R.fail(500, "服务内部错误，请稍后重试"));
     }
 }

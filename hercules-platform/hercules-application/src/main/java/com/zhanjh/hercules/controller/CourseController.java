@@ -22,7 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
  * </ul>
  *
  * <p>错误码语义（GlobalExceptionHandler 将 BusinessException 的 code 映射为 HTTP 状态码）：
- * 404 表示课程不存在；本控制器为纯读路径，不产生 400（参数均有默认值或可空）与 409。
+ * 404 表示课程不存在；400 表示分页参数越界（page &lt; 1，或 size 超出 1~{@value #MAX_PAGE_SIZE}）；
+ * 本控制器为纯读路径，不产生 409。
  *
  * <p>线程安全性：无实例状态，仅委托无状态的 CourseService。
  *
@@ -35,6 +36,9 @@ public class CourseController {
 
     /** 课程查询服务：承载多级缓存读路径 */
     private final CourseService courseService;
+
+    /** 每页条数上限：防止过大的 size 单页拉取全表（分页边界校验，遗留事项清理） */
+    private static final int MAX_PAGE_SIZE = 100;
 
     /**
      * 构造注入。
@@ -55,15 +59,23 @@ public class CourseController {
      *  "records":[{"id":1,"courseCode":"CS101","courseName":"...","enrolled":30,"capacity":60}]}}
      * }</pre>
      *
-     * @param page    页码，缺省 1
-     * @param size    每页条数，缺省 10
+     * @param page    页码，缺省 1，必须 ≥ 1
+     * @param size    每页条数，缺省 10，必须在 1~{@value #MAX_PAGE_SIZE} 之间
      * @param keyword 可选关键字，匹配课程名/课程编号/教师名三列（OR LIKE）；缺省时全量分页
      * @return 统一响应体，data 为 PageResult&lt;Course&gt;
+     * @throws BusinessException code=400（HTTP 400），page &lt; 1 或 size 越界时抛出
      */
     @GetMapping
     public R<PageResult<Course>> list(@RequestParam(defaultValue = "1") int page,
                                       @RequestParam(defaultValue = "10") int size,
                                       @RequestParam(required = false) String keyword) {
+        // 分页边界校验：显式 400 拒绝而非静默截断，杜绝 size 大值单页拉全表（遗留事项清理）
+        if (page < 1) {
+            throw new BusinessException(400, "page 必须 >= 1");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BusinessException(400, "size 必须在 1~" + MAX_PAGE_SIZE + " 之间");
+        }
         return R.ok(courseService.list(page, size, keyword));
     }
 

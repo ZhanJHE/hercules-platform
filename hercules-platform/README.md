@@ -2,10 +2,15 @@
 
 对应《起步文档》的多模块架构（§3.2）。当前已完成：
 
-- **阶段 0**：MVP 纵向切片 + Javadoc 全量注释 + 三项修复（35/35 测试）；
-- **阶段 A**：单模块重构为 Maven 多模块（11 模块），功能等价迁移 + 真机冒烟复验通过。
+- **阶段 0**：MVP 纵向切片（多级缓存 + 向量时钟同步链 + 防超选）；
+- **阶段 A**：单模块重构为 Maven 多模块（11 模块），功能等价迁移；
+- **阶段 A+**：高可用加固（全链路超时/Redis 熔断降级/防击穿）+ 双 Token 认证 + 日志设计（traceId 贯通/审计落盘）；
+- **阶段 H-1~H-4**：WSL2/Docker 全栈部署（六容器）+ 最小网关（JWT 验签/透传头防伪造）+ JMeter 500 并发阶梯压测（5,027 req/s，错误率 0.0007%）与 JVM/连接池调优。
+
+自动化测试 **67/67 全绿**（common 4 + cache 21 + sync 24 + application 18，H2 + 内存桩，不依赖本机中间件）。
 
 > 单模块历史版本见 git 基线提交 `bfb4b6e`（原 `hercules/` 目录已退役删除）。
+> 网页版完整讲解见 `开发文档/项目讲解.html`。
 
 ## 1. 模块结构
 
@@ -41,40 +46,45 @@ hercules-platform/
 
 ```powershell
 cd hercules-platform
-.\mvnw.cmd test            # 全模块 35 个测试（H2 + 内存桩 L2，不依赖本机 MySQL/Redis）
+.\mvnw.cmd test            # 全模块 67 个测试（H2 + 内存桩 L2，不依赖本机 MySQL/Redis）
 .\mvnw.cmd package -DskipTests
 java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
 # 或：.\mvnw.cmd spring-boot:run -pl hercules-application
 ```
 
-## 4. 接口清单（与单模块版一致）
+## 4. 接口清单（认证后契约）
 
-| Method | Path | 说明 |
-| :--- | :--- | :--- |
-| GET | `/api/v1/courses?page=&size=&keyword=` | 课程分页/检索（多级缓存） |
-| GET | `/api/v1/courses/{id}` | 课程详情（多级缓存，纳入版本链） |
-| POST | `/api/v1/enrollment` | 选课（@Valid 校验 + 防超选事务 + 同步链刷缓存） |
-| DELETE | `/api/v1/enrollment?studentId=&courseId=` | 退课 |
-| GET | `/api/v1/cache/stats` | 命中率/各级计数/同步与冲突计数 |
-| POST | `/api/v1/debug/simulate-conflict` | 模拟 node-sim 并发写（演示 LWW 合并） |
-| POST | `/api/v1/debug/evict-local?key=` | 手动失效 L1（演示 L2 回填） |
-| GET | `/actuator/prometheus` | Micrometer 指标 |
+| Method | Path | 说明 | 权限 |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/v1/auth/login` | 登录（双 Token） | 公开 |
+| POST | `/api/v1/auth/refresh` | 刷新（旋转式） | 公开 |
+| POST | `/api/v1/auth/logout` | 登出（jti 黑名单） | 登录 |
+| GET | `/api/v1/courses?page=&size=&keyword=` | 课程分页/检索（多级缓存；page≥1，1≤size≤100） | 登录 |
+| GET | `/api/v1/courses/{id}` | 课程详情（纳入版本链） | 登录 |
+| POST | `/api/v1/enrollment` | 选课（body 仅 `{courseId}`，studentId 取自 token；重复选课 409） | STUDENT |
+| DELETE | `/api/v1/enrollment?courseId=` | 退课 | STUDENT |
+| GET | `/api/v1/enrollment/mine` | 本人选课记录 | STUDENT |
+| GET | `/api/v1/cache/stats` | 命中率/各级计数/同步与冲突计数 | ADMIN |
+| POST | `/api/v1/debug/simulate-conflict` | 模拟 node-sim 并发写（演示 LWW 合并） | ADMIN |
+| POST | `/api/v1/debug/evict-local?key=` | 手动失效 L1（演示 L2 回填） | ADMIN |
+| GET | `/actuator/prometheus` | Micrometer 指标 | 公开 |
 
-## 5. 现场演示脚本
+## 5. 现场演示脚本（登录先行）
 
 ```powershell
-curl "http://127.0.0.1:8080/api/v1/courses?page=1&size=10"
-curl http://127.0.0.1:8080/api/v1/cache/stats
-curl -X POST "http://127.0.0.1:8080/api/v1/debug/evict-local?key=course:list:1:10:-"
-curl -X POST http://127.0.0.1:8080/api/v1/enrollment -H "Content-Type: application/json" -d '{"studentId":20240001,"courseId":1}'
-curl -X POST http://127.0.0.1:8080/api/v1/debug/simulate-conflict -H "Content-Type: application/json" -d '{"courseId":1,"courseName":"程序设计基础(合并后)"}'
-curl http://127.0.0.1:8080/api/v1/courses/1
+$token = (Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/v1/auth/login" `
+  -ContentType "application/json" -Body '{"username":"st001","password":"123456"}').data.accessToken
+curl "http://127.0.0.1:8080/api/v1/courses?page=1&size=10" -H "Authorization: Bearer $token"
+curl -X POST http://127.0.0.1:8080/api/v1/enrollment -H "Authorization: Bearer $token" -H "Content-Type: application/json" -d '{"courseId":1}'
+curl http://127.0.0.1:8080/api/v1/enrollment/mine -H "Authorization: Bearer $token"
 ```
 
+部署（Docker 五容器）与压测使用说明见《开发文档/环境配置与部署.md》；
 详细链路说明、FR 对照表、已知事项见《开发文档/包结构说明.md》与《开发文档/工作日志.md》。
 
 ## 6. 已知取舍（随阶段演进消解）
 
-- 列表键短 TTL 现已 L1/L2 双级生效（Caffeine 自定义 Expiry）；
 - Canal/RocketMQ 真实 Binlog 链路：阶段 B（`hercules.sync.transport` 开关，in-process 为默认）；
-- 巡检/智能体/RAG/网关/前端：按阶段 C/D/E/G/H 依次填充。
+- 巡检/智能体/RAG/前端：按阶段 C/D/E/G 依次填充；
+- 冲突合并旧值取自 L2，L2 逐出后退化为整体采用新值（设计级限制，已记录）；
+- 存量 MySQL 库需手动执行一次 `ALTER TABLE t_enrollment ADD CONSTRAINT uk_student_course UNIQUE (student_id, course_id)`（见 schema.sql 注记）。

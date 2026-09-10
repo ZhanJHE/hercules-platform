@@ -24,8 +24,15 @@ CREATE TABLE IF NOT EXISTS t_enrollment (
     course_id   BIGINT      NOT NULL,
     status      TINYINT     NOT NULL,          -- 0-预选 1-已选 2-退选
     create_time DATETIME(3) NOT NULL,
-    update_time DATETIME(3) NOT NULL
+    update_time DATETIME(3) NOT NULL,
+    -- 每对学生-课程至多一行，状态原地流转（选→退→再选为 UPDATE 回 status=1，不新增行）；
+    -- 重复选课由应用层守卫拦截（EnrollmentService.enroll），本约束作为并发双击的数据库兜底
+    CONSTRAINT uk_student_course UNIQUE (student_id, course_id)
 );
+-- 存量库升级提示（MySQL 8 的 CREATE TABLE IF NOT EXISTS 不会为已存在的表补约束，
+-- 且不支持 ADD CONSTRAINT IF NOT EXISTS；已有数据的环境需手动执行一次）：
+--   ALTER TABLE t_enrollment ADD CONSTRAINT uk_student_course UNIQUE (student_id, course_id);
+--   （若历史数据已存在重复的 (student_id, course_id) 行，需先去重再执行）
 
 CREATE TABLE IF NOT EXISTS t_cache_version (
     id                BIGINT PRIMARY KEY AUTO_INCREMENT,

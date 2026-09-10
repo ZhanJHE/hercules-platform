@@ -39,13 +39,20 @@ public class VersionChangeEventListener {
     /**
      * 事务提交后（或无事务上下文时立即）回调：把事件载荷转交消费者。
      *
-     * <p>实现要点：catch (Exception) 兜底捕获全部异常并记 error 日志后返回，
-     * 不向事件多播器抛出，保证同步链路失败不影响已提交的业务响应。</p>
+     * <p>实现要点：先做 null 兜底（事件或载荷为 null 时记 warn 直接返回，遗留事项清理——
+     * 原 catch 块内取 event.value().key() 自身会二次 NPE，兜底不闭合）；再 catch (Exception)
+     * 兜底捕获全部异常并记 error 日志后返回，不向事件多播器抛出，保证同步链路失败不影响
+     * 已提交的业务响应。</p>
      *
-     * @param event 版本变更事件（由 InProcessEventBusProducer 发布），不应为 null
+     * @param event 版本变更事件（由 InProcessEventBusProducer 发布），允许为 null（按无效事件忽略）
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void on(VersionChangeEvent event) {
+        if (event == null || event.value() == null) {
+            // null 兜底前置：无效事件不进入消费，也避免 catch 块内取 key 时二次 NPE
+            log.warn("[hercules-sync] ignore null version event or null payload");
+            return;
+        }
         try {
             consumer.onMessage(event.value());
         } catch (Exception e) {

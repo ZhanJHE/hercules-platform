@@ -17,13 +17,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -38,10 +41,12 @@ import static org.mockito.Mockito.when;
  * <p>覆盖场景：
  * <ul>
  *   <li>{@code noStoredVersionAppliesAsNew}：无存量版本 → 按 AFTER 应用：写 L2、insert 版本行、versionApplied=1、conflictDetected=0；</li>
- *   <li>{@code dominatedVersionIsDiscarded}：来包被存量支配 → 丢弃：不写 L2、不 insert/updateById、versionApplied=0；</li>
- *   <li>{@code dominatingVersionIsApplied}：来包支配存量 → updateById 且 currentVersion 4→5、时钟 JSON 含新增节点 node-2；</li>
+ *   <li>{@code dominatedVersionIsDiscarded}：来包被存量支配 → 丢弃：不写 L2、不 insert/不更新版本行、versionApplied=0；</li>
+ *   <li>{@code dominatingVersionIsApplied}：来包支配存量 → 乐观锁更新（expectedVersion=4）且时钟 JSON 含新增节点 node-2；</li>
  *   <li>{@code concurrentVersionIsMergedWithLww}：并发冲突 → 字段级 LWW 合并（courseName 取新值、teacherName 保留）、时钟取并集（node-1+node-sim）、conflictDetected=1；</li>
- *   <li>{@code mergedValueAlsoInvalidatesLocalCache}：合并应用后同步失效 L1，本地 stale-value 被清除。</li>
+ *   <li>{@code mergedValueAlsoInvalidatesLocalCache}：合并应用后同步失效 L1，本地 stale-value 被清除；</li>
+ *   <li>{@code insertDuplicateKeyFallsBackToOptimisticUpdate}（遗留事项清理）：多实例并发首写，insert 唯一键冲突 → 重查转乐观锁更新；</li>
+ *   <li>{@code optimisticLockConflictRetriesOnceThenSkipsPersist}（遗留事项清理）：乐观锁两次竞争失败 → 缓存已应用、时钟持久化跳过、不抛异常。</li>
  * </ul>
  *
  * @author zhanjh
@@ -111,7 +116,7 @@ class VersionChangeConsumerTest {
 
         assertThat(remote.get(KEY)).isEqualTo("{\"id\":1,\"enrolled\":88}");
         verify(cacheVersionMapper).insert(any(CacheVersion.class));
-        verify(cacheVersionMapper, never()).updateById(any(CacheVersion.class));
+        verify(cacheVersionMapper, never()).updateVersionRow(any(), any(), any(), any(), any());
         assertThat(stats.snapshot().versionApplied()).isEqualTo(1);
         assertThat(stats.snapshot().conflictDetected()).isZero();
     }
@@ -130,27 +135,27 @@ class VersionChangeConsumerTest {
 
         assertThat(remote.get(KEY)).isNull();
         verify(cacheVersionMapper, never()).insert(any(CacheVersion.class));
-        verify(cacheVersionMapper, never()).updateById(any(CacheVersion.class));
+        verify(cacheVersionMapper, never()).updateVersionRow(any(), any(), any(), any(), any());
         assertThat(stats.snapshot().versionApplied()).isZero();
     }
 
     /**
      * 验证点：来包时钟（node-1:5 + 新增 node-2:1）支配存量（node-1:3）→ 应用并 upsert：
-     * 值写入 L2；updateById 捕获到的行 currentVersion 由 4 递增为 5，时钟 JSON 含新增节点 node-2。
+     * 值写入 L2；乐观锁更新以 expectedVersion=4 提交（updateVersionRow），时钟 JSON 含新增节点 node-2。
      */
     @Test
     void dominatingVersionIsApplied() {
         CacheVersion stored = storedRow(4L, new VectorClock(Map.of("node-1", 3L)));
         when(cacheVersionMapper.selectOne(any())).thenReturn(stored);
+        when(cacheVersionMapper.updateVersionRow(any(), any(), any(), any(), any())).thenReturn(1);
 
         consumer.onMessage(incoming("{\"id\":1,\"enrolled\":90}",
                 new VectorClock(Map.of("node-1", 5L, "node-2", 1L)), 2000L));
 
         assertThat(remote.get(KEY)).isEqualTo("{\"id\":1,\"enrolled\":90}");
-        ArgumentCaptor<CacheVersion> captor = ArgumentCaptor.forClass(CacheVersion.class);
-        verify(cacheVersionMapper).updateById(captor.capture());
-        assertThat(captor.getValue().getCurrentVersion()).isEqualTo(5L);
-        assertThat(captor.getValue().getVectorClockJson()).contains("node-2");
+        ArgumentCaptor<String> clockCaptor = ArgumentCaptor.forClass(String.class);
+        verify(cacheVersionMapper).updateVersionRow(eq(1L), eq(4L), eq("node-1"), clockCaptor.capture(), any());
+        assertThat(clockCaptor.getValue()).contains("node-2");
     }
 
     /**
@@ -164,6 +169,7 @@ class VersionChangeConsumerTest {
         // 存量 updateTime 是合并时「旧值时间戳」的来源
         stored.setUpdateTime(LocalDateTime.now());
         when(cacheVersionMapper.selectOne(any())).thenReturn(stored);
+        when(cacheVersionMapper.updateVersionRow(any(), any(), any(), any(), any())).thenReturn(1);
         // 预置 L2 现值：courseName 与 teacherName 并存，合并后 teacherName 应保留
         remote.put(KEY, "{\"id\":1,\"courseName\":\"程序设计基础\",\"teacherName\":\"张伟\"}", null);
 
@@ -174,9 +180,9 @@ class VersionChangeConsumerTest {
 
         String merged = remote.get(KEY);
         assertThat(merged).contains("程序设计基础(合并后)").contains("张伟");
-        ArgumentCaptor<CacheVersion> captor = ArgumentCaptor.forClass(CacheVersion.class);
-        verify(cacheVersionMapper).updateById(captor.capture());
-        assertThat(captor.getValue().getVectorClockJson())
+        ArgumentCaptor<String> clockCaptor = ArgumentCaptor.forClass(String.class);
+        verify(cacheVersionMapper).updateVersionRow(eq(1L), eq(2L), eq("node-sim"), clockCaptor.capture(), any());
+        assertThat(clockCaptor.getValue())
                 .contains("node-1")
                 .contains("node-sim");
         assertThat(stats.snapshot().conflictDetected()).isEqualTo(1);
@@ -191,6 +197,7 @@ class VersionChangeConsumerTest {
         CacheVersion stored = storedRow(1L, new VectorClock(Map.of("node-1", 1L)));
         stored.setUpdateTime(LocalDateTime.now());
         when(cacheVersionMapper.selectOne(any())).thenReturn(stored);
+        when(cacheVersionMapper.updateVersionRow(any(), any(), any(), any(), any())).thenReturn(1);
         // 预置过期 L1 值，验证消费端应用版本后必定失效本地缓存
         local.put(KEY, "stale-value", null);
         remote.put(KEY, "{\"id\":1,\"courseName\":\"旧\"}", null);
@@ -199,6 +206,46 @@ class VersionChangeConsumerTest {
                 "node-sim", System.currentTimeMillis(), new VectorClock().increment("node-sim")));
 
         assertThat(local.get(KEY)).isNull();
+    }
+
+    /**
+     * 验证点（遗留事项清理，多实例并发首写）：insert 命中 uk_cache_key 唯一键冲突 →
+     * 重查存量行转乐观锁更新，最终版本行被更新且消息正常应用（不抛异常、计数正常）。
+     */
+    @Test
+    void insertDuplicateKeyFallsBackToOptimisticUpdate() {
+        CacheVersion existing = storedRow(3L, new VectorClock(Map.of("node-2", 2L)));
+        // 首次 selectOne（决策读）无存量；冲突后 loadByKey 重查返回并发方已建的行
+        when(cacheVersionMapper.selectOne(any())).thenReturn(null, existing);
+        when(cacheVersionMapper.insert(any(CacheVersion.class)))
+                .thenThrow(new DuplicateKeyException("Duplicate entry 'course:1' for key 'uk_cache_key'"));
+        when(cacheVersionMapper.updateVersionRow(any(), any(), any(), any(), any())).thenReturn(1);
+
+        consumer.onMessage(incoming("{\"id\":1,\"enrolled\":88}",
+                new VectorClock().increment("node-1"), 1000L));
+
+        assertThat(remote.get(KEY)).isEqualTo("{\"id\":1,\"enrolled\":88}");
+        verify(cacheVersionMapper).insert(any(CacheVersion.class));
+        verify(cacheVersionMapper).updateVersionRow(eq(1L), eq(3L), eq("node-1"), any(), any());
+        assertThat(stats.snapshot().versionApplied()).isEqualTo(1);
+    }
+
+    /**
+     * 验证点（遗留事项清理，乐观锁竞争失败）：两次 updateVersionRow 均 0 行（并发方持续推进）→
+     * 重查重试一次后放弃时钟持久化并记 warn——缓存值已应用、不抛异常，下一条消息会重新决策。
+     */
+    @Test
+    void optimisticLockConflictRetriesOnceThenSkipsPersist() {
+        CacheVersion stored = storedRow(4L, new VectorClock(Map.of("node-1", 3L)));
+        when(cacheVersionMapper.selectOne(any())).thenReturn(stored);
+        when(cacheVersionMapper.updateVersionRow(any(), any(), any(), any(), any())).thenReturn(0, 0);
+
+        consumer.onMessage(incoming("{\"id\":1,\"enrolled\":90}",
+                new VectorClock(Map.of("node-1", 5L, "node-2", 1L)), 2000L));
+
+        assertThat(remote.get(KEY)).isEqualTo("{\"id\":1,\"enrolled\":90}");
+        verify(cacheVersionMapper, times(2)).updateVersionRow(any(), any(), any(), any(), any());
+        assertThat(stats.snapshot().versionApplied()).isEqualTo(1);
     }
 
     /**

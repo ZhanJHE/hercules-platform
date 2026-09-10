@@ -26,7 +26,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 
 ROOT = Path(r"C:\Users\ZhanJH\Desktop\MyProject\Hercules")
-SRC = ROOT / "设计类.md"
+SRC = ROOT / "开发文档" / "设计类.md"
 OUT = ROOT / "开发文档" / "images"
 OUT.mkdir(parents=True, exist_ok=True)
 

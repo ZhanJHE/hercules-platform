@@ -15,6 +15,7 @@ import com.zhanjh.hercules.sync.model.VersionedValue;
 import com.zhanjh.hercules.sync.producer.VersionChangeProducer;
 import com.zhanjh.hercules.sync.clock.VectorClock;
 import com.zhanjh.hercules.sync.support.VersionReader;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -90,26 +91,42 @@ public class EnrollmentService {
      * <ol>
      *   <li>从认证主体取 studentId（非学生角色 → 403，水平越权收敛）；</li>
      *   <li>查课程，不存在 → 404；</li>
+     *   <li>重复选课守卫：已有 status=1 记录 → 409（在扣减人数之前拦截，
+     *       正常重复无需依赖事务回滚；并发竞态由唯一键与条件更新兜底，见下）；</li>
      *   <li>{@code increaseEnrolled}：{@code UPDATE t_course SET enrolled = enrolled + 1
      *       WHERE id = ? AND enrolled < capacity}，0 行受影响说明余量已满 → 409（防超选核心）；</li>
-     *   <li>插入 t_enrollment：status=1（已选），createTime/updateTime 取当前时间；</li>
+     *   <li>写选课记录（t_enrollment 受 uk_student_course 唯一键约束，每对学生-课程至多一行）：
+     *       存在 status=2 历史行 → 条件 UPDATE 原地复活（0 行说明并发重选已被其他请求完成 → 409）；
+     *       无任何历史行 → insert（并发双击下唯一键冲突捕获为 409）；</li>
      *   <li>发布课程版本事件（事务提交后才被消费，刷新 course:{id} 缓存）。</li>
      * </ol>
      *
+     * <p>并发正确性说明：同一学生同一课程的并发选课在 t_course 行锁上串行化；落败方
+     * （唯一键冲突或复活条件更新 0 行）抛 409 结束事务，其人数扣减一并回滚，enrolled 与记录保持平衡。
+     *
      * @param principal 认证主体（JWT claims，含 studentId）
      * @param courseId  课程 ID
-     * @return 新建的选课记录（含自增主键，status=1 已选）
+     * @return 本次生效的选课记录（新建或复活的行，status=1 已选）
      * @throws BusinessException code=403（HTTP 403）非学生角色；
      *                           code=404（HTTP 404）课程不存在；
-     *                           code=409（HTTP 409）课程容量已满（enrolled 已达 capacity）
+     *                           code=409（HTTP 409）课程容量已满，或重复选课（含并发双击落败方）
      */
     @Transactional(timeout = 5) // 高可用加固：事务超时 5s，防慢查询长期占用连接与线程
     public Enrollment enroll(JwtUtil.AuthClaims principal, Long courseId) {
         Long studentId = requireStudentId(principal);
         Course course = courseMapper.selectById(courseId);
-        // 此处查询仅提供 404 语义与满员提示文案；真正的防超选由下一步条件 UPDATE 保证
+        // 此处查询仅提供 404 语义与满员/重复提示文案；真正的防超选由下一步条件 UPDATE 保证
         if (course == null) {
             throw new BusinessException(404, "课程不存在: " + courseId);
+        }
+        // 重复选课守卫：正常重复在扣减人数前即被拦截（并发窗口由唯一键 + 条件更新兜底）
+        Enrollment active = enrollmentMapper.selectOne(new QueryWrapper<Enrollment>()
+                .eq("student_id", studentId)
+                .eq("course_id", courseId)
+                .eq("status", Enrollment.STATUS_ENROLLED)
+                .last("LIMIT 1"));
+        if (active != null) {
+            throw new BusinessException(409, "请勿重复选课: " + course.getCourseName());
         }
         // 原子条件更新：并发扣减由数据库行锁串行化，余量不足时 0 行受影响 → 409
         int rows = courseMapper.increaseEnrolled(courseId);
@@ -117,13 +134,40 @@ public class EnrollmentService {
             throw new BusinessException(409, "课程容量已满: " + course.getCourseName());
         }
         LocalDateTime now = LocalDateTime.now();
-        Enrollment enrollment = new Enrollment();
-        enrollment.setStudentId(studentId);
-        enrollment.setCourseId(courseId);
-        enrollment.setStatus(Enrollment.STATUS_ENROLLED);
-        enrollment.setCreateTime(now);
-        enrollment.setUpdateTime(now);
-        enrollmentMapper.insert(enrollment);
+        // 退选后再选：原地复活历史行（uk_student_course 下每对学生-课程至多一行）；
+        // WHERE status=2 的条件更新使并发重选只成功一次，0 行说明他方已复活 → 409 回滚本次扣减
+        Enrollment prior = enrollmentMapper.selectOne(new QueryWrapper<Enrollment>()
+                .eq("student_id", studentId)
+                .eq("course_id", courseId)
+                .orderByDesc("id")
+                .last("LIMIT 1"));
+        Enrollment enrollment;
+        if (prior != null) {
+            prior.setStatus(Enrollment.STATUS_ENROLLED);
+            prior.setCreateTime(now);
+            prior.setUpdateTime(now);
+            int reactivated = enrollmentMapper.update(prior, new QueryWrapper<Enrollment>()
+                    .eq("id", prior.getId())
+                    .eq("status", Enrollment.STATUS_WITHDRAWN));
+            if (reactivated == 0) {
+                throw new BusinessException(409, "请勿重复选课: " + course.getCourseName());
+            }
+            enrollment = prior;
+        } else {
+            enrollment = new Enrollment();
+            enrollment.setStudentId(studentId);
+            enrollment.setCourseId(courseId);
+            enrollment.setStatus(Enrollment.STATUS_ENROLLED);
+            enrollment.setCreateTime(now);
+            enrollment.setUpdateTime(now);
+            try {
+                enrollmentMapper.insert(enrollment);
+            } catch (DuplicateKeyException e) {
+                // 并发双击兜底：唯一键 uk_student_course 冲突说明另一并发请求已先行建行；
+                // 抛 409 结束事务，本事务对 t_course 的人数扣减一并回滚
+                throw new BusinessException(409, "请勿重复选课: " + course.getCourseName());
+            }
+        }
         publishCourseVersion(courseId);
         return enrollment;
     }
@@ -151,7 +195,7 @@ public class EnrollmentService {
     @Transactional(timeout = 5) // 高可用加固：事务超时 5s
     public Enrollment withdraw(JwtUtil.AuthClaims principal, Long courseId) {
         Long studentId = requireStudentId(principal);
-        // 取最大 id 的一条 status=1 记录作为当前有效记录：兼容「退选后再选」产生的多条历史
+        // 取当前有效记录：uk_student_course 唯一键下每对学生-课程至多一行（退选为原地置 status=2）
         Enrollment existing = enrollmentMapper.selectOne(new QueryWrapper<Enrollment>()
                 .eq("student_id", studentId)
                 .eq("course_id", courseId)
