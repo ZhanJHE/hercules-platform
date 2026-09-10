@@ -109,6 +109,7 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
   <a href="#data-api"><b>10</b>数据库与 API</a>
   <a href="#stack"><b>11</b>技术选型</a>
   <a href="#testing"><b>12</b>测试、压测与路线图</a>
+  <a href="#frontend"><b>13</b>前端设计（hercules-ui）</a>
   <a href="#sources"><b>附</b>资料来源</a>
 </nav>
 
@@ -144,9 +145,9 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
     <tr><td>核心框架</td><td>Spring Boot 3.5.16</td></tr>
     <tr><td>工程结构</td><td>Maven 多模块，11 个模块（3.9.16 wrapper 构建）</td></tr>
     <tr><td>数据存储</td><td>MySQL 8（业务数据）+ Redis 7（分布式缓存）</td></tr>
-    <tr><td>自动化测试</td><td>96/96 通过，不依赖外部中间件与网络（《测试报告》§一、§八、§九）</td></tr>
+    <tr><td>自动化测试</td><td>后端 96/96 + 前端 Vitest 15/15，不依赖外部中间件与网络（《测试报告》§一、§八、§九、§十）</td></tr>
     <tr><td>压测结果</td><td>500 并发稳定 10 分钟，5,027 请求/秒，错误率 0.0007%（《测试报告》§6.2）</td></tr>
-    <tr><td>部署形态</td><td>Windows + WSL2 + Docker Compose，九个容器（MySQL / Redis / RocketMQ×2 / Canal / 应用 / 网关 / Prometheus / Grafana）</td></tr>
+    <tr><td>部署形态</td><td>Windows + WSL2 + Docker Compose，十个容器（MySQL / Redis / RocketMQ×2 / Canal / 应用 / 网关 / 前端 nginx / Prometheus / Grafana）</td></tr>
   </tbody>
 </table>
 
@@ -207,17 +208,17 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
 <table>
   <thead><tr><th>模块</th><th>职责</th><th>代码状态</th></tr></thead>
   <tbody>
-    <tr><td><code>hercules-common</code></td><td>公共基础：实体类、异常定义、JSON 工具</td><td>已实现（15 个类）</td></tr>
+    <tr><td><code>hercules-common</code></td><td>公共基础：实体类（含 agent/sync 模型）、异常定义、JSON 工具</td><td>已实现（23 个类）</td></tr>
     <tr><td><code>hercules-cache</code></td><td>缓存治理：多级缓存入口、TTL 策略、命中统计、熔断降级、防击穿</td><td>已实现（17 个类）</td></tr>
-    <tr><td><code>hercules-sync</code></td><td>数据同步：向量时钟、版本变更的生产与消费、字段级合并</td><td>已实现（13 个类）</td></tr>
-    <tr><td><code>hercules-application</code></td><td>唯一可执行应用：REST 接口、安全配置、启动类、种子数据</td><td>已实现（17 个类）</td></tr>
+    <tr><td><code>hercules-sync</code></td><td>数据同步：向量时钟、Canal+RocketMQ 消费、字段级合并</td><td>已实现（17 个类）</td></tr>
+    <tr><td><code>hercules-agent</code></td><td>多智能体：意图路由、推荐、排课冲突、确认制执行（Spring AI 接入）</td><td>已实现（15 个类，阶段 D）</td></tr>
+    <tr><td><code>hercules-application</code></td><td>唯一可执行应用：REST 接口、安全配置、SSE 对话端点、适配器、种子数据</td><td>已实现（19 个类）</td></tr>
     <tr><td><code>hercules-gateway</code></td><td>独立网关：JWT 验签、透传头注入、traceId 下发</td><td>已实现最小版（4 个类）</td></tr>
-    <tr><td><code>hercules-inspector</code></td><td>巡检自愈：定时比对缓存与数据库、生成修复 SQL</td><td>空模块（阶段 C 填充）</td></tr>
-    <tr><td><code>hercules-agent</code></td><td>多智能体：四类智能体的定义与协作</td><td>已实现（13 类，阶段 D）</td></tr>
+    <tr><td><code>hercules-ui</code></td><td>Vue3 前端：左侧菜单 + 顶栏布局，学生端与管理端</td><td>已实现（阶段 G，nginx 容器 :8090）</td></tr>
+    <tr><td><code>hercules-inspector</code></td><td>巡检自愈：定时比对缓存与数据库、生成修复 SQL</td><td>空模块（阶段 C 顺延）</td></tr>
     <tr><td><code>hercules-rag</code></td><td>RAG 检索：课程文档向量化与检索</td><td>空模块（阶段 E 填充）</td></tr>
     <tr><td><code>hercules-observability</code></td><td>可观测性聚合：链路追踪配置、指标汇总</td><td>空模块（阶段 F 填充）</td></tr>
     <tr><td><code>hercules-admin</code></td><td>管控台后端：运维接口、健康度计算</td><td>空模块（规划）</td></tr>
-    <tr><td><code>hercules-ui</code></td><td>Vue3 前端：学生端与运维端界面</td><td>未创建（阶段 G）</td></tr>
   </tbody>
 </table>
 <p>另有两个非 Java 目录：<code>loadtest/</code>（JMeter 压测工程）与 <code>deploy/</code>（Docker Compose 部署编排文件）。</p>
@@ -264,7 +265,19 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
 </table>
 <p>L1 使用 Caffeine 的自定义 Expiry（过期策略）按键设置各自的 TTL，而不是全局统一时间；缓存总量有上限，超限时由 Caffeine 内置的 W-TinyLFU 策略淘汰访问频率最低的条目。</p>
 
-<h3>4.3 命中率统计</h3>
+<h3>4.3 缓存键全景</h3>
+<table>
+  <thead><tr><th>键</th><th>存储</th><th>TTL</th><th>语义</th></tr></thead>
+  <tbody>
+    <tr><td><code>course:{id}</code></td><td>L1 + L2</td><td>L1 60s / L2 300s</td><td>课程详情，<b>纳入向量时钟版本链</b>：写路径 / Canal 链路均经消费者应用（写 L2 + 失效 L1 + 更新 t_cache_version）</td></tr>
+    <tr><td><code>course:list:{page}:{size}:{keyword}</code></td><td>L1 + L2</td><td>均 10s</td><td>课程列表（keyword 小写归一 + 转义），<b>不纳入版本链</b>，靠 10s 最终一致窗口</td></tr>
+    <tr><td><code>auth:refresh:{uuid}</code></td><td>Redis</td><td>7 天</td><td>刷新令牌白名单（旋转式：换新删旧）</td></tr>
+    <tr><td><code>auth:blacklist:{jti}</code></td><td>Redis</td><td>= Access 剩余有效期</td><td>登出黑名单（应用层校验）</td></tr>
+    <tr><td>回源锁（load-lock）</td><td>Redis</td><td>3s</td><td>防击穿分布式回源锁（SET NX + Lua 释放）</td></tr>
+  </tbody>
+</table>
+
+<h3>4.4 命中率统计</h3>
 <p><code>CacheStatsCollector</code> 用原子计数器记录 L1/L2 命中、未命中、数据库回源次数，并计算总体命中率（L1 命中 + L2 命中，除以总读请求）。数据有两个出口：</p>
 <ul>
   <li><code>GET /api/v1/cache/stats</code>：人工查询接口（管理员权限）；</li>
@@ -539,7 +552,7 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
   <thead><tr><th>表</th><th>用途</th><th>关键字段</th><th>状态</th></tr></thead>
   <tbody>
     <tr><td><code>t_course</code></td><td>课程</td><td>课程编号（唯一）、名称、学分、容量、已选人数、上课时间与先修课（JSON 文本）</td><td>使用中</td></tr>
-    <tr><td><code>t_enrollment</code></td><td>选课记录</td><td>学生 ID、课程 ID、状态（0 预选 / 1 已选 / 2 退选）</td><td>使用中</td></tr>
+    <tr><td><code>t_enrollment</code></td><td>选课记录</td><td>学生 ID、课程 ID、状态（0 预选 / 1 已选 / 2 退选）；<b>唯一键 uk_student_course(student_id, course_id)</b>：每对学生-课程至多一行，重复选课由应用守卫 + 数据库兜底双重拦截</td><td>使用中</td></tr>
     <tr><td><code>t_user</code></td><td>用户</td><td>用户名（唯一）、BCrypt 密码、角色（STUDENT / ADMIN）、学号</td><td>使用中</td></tr>
     <tr><td><code>t_cache_version</code></td><td>缓存版本</td><td>缓存键（唯一）、节点名、当前版本号、向量时钟 JSON</td><td>使用中（同步链判定依据）</td></tr>
     <tr><td><code>t_repair_log</code></td><td>修复日志</td><td>差异两端值、冲突类型、补偿 SQL、修复状态</td><td>占位（阶段 C 启用）</td></tr>
@@ -562,6 +575,8 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
     <tr><td>POST</td><td><code>/api/v1/enrollment</code></td><td>选课（请求体只含 courseId，studentId 取自令牌）</td><td>STUDENT</td></tr>
     <tr><td>DELETE</td><td><code>/api/v1/enrollment?courseId=</code></td><td>退课</td><td>STUDENT</td></tr>
     <tr><td>GET</td><td><code>/api/v1/enrollment/mine</code></td><td>本人选课记录</td><td>STUDENT</td></tr>
+    <tr><td>POST</td><td><code>/api/v1/chat</code></td><td>自然语言对话（<b>SSE 流式</b>：token 事件逐片、meta 事件结构化数据、error 兜底）；意图路由 → 推荐/冲突校验/确认制执行</td><td>登录</td></tr>
+    <tr><td>GET</td><td><code>/api/v1/chat/history/{sessionId}</code></td><td>会话历史（内存态，重启清空）</td><td>登录</td></tr>
     <tr><td>GET</td><td><code>/api/v1/cache/stats</code></td><td>命中率、各级命中、同步与冲突计数</td><td>ADMIN</td></tr>
     <tr><td>POST</td><td><code>/api/v1/debug/simulate-conflict</code></td><td>模拟双节点并发写冲突（演示用）</td><td>ADMIN</td></tr>
     <tr><td>POST</td><td><code>/api/v1/debug/evict-local?key=</code></td><td>手动失效 L1，演示 L2 回填（演示用）</td><td>ADMIN</td></tr>
@@ -599,7 +614,7 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
     <tr><td>Canal + RocketMQ</td><td>阶段 B（✅ 已接入）</td><td>真实 Binlog 同步链：监听数据库变更，经消息队列异步刷新缓存（写路径削峰）；实测外部直改库 250ms 同步缓存</td></tr>
     <tr><td>Spring AI</td><td>阶段 D（✅ 已接入）</td><td>四类智能体（路由 / 推荐 / 排课冲突 / 执行）的模型接入与编排；GLM glm-4.5-air 经 OpenAI 兼容协议</td></tr>
     <tr><td>Milvus + Neo4j</td><td>阶段 E</td><td>向量检索（课程语义搜索）与图检索（先修课、培养方案关系）</td></tr>
-    <tr><td>Vue 3 + Element Plus + ECharts</td><td>阶段 G</td><td>学生端对话助手与治理驾驶舱界面</td></tr>
+    <tr><td>Vue 3 + Element Plus + ECharts</td><td>阶段 G（✅ 已接入）</td><td>学生端对话助手（SSE 流式 + 候选卡确认）与治理驾驶舱；nginx 容器 :8090</td></tr>
   </tbody>
 </table>
 
@@ -611,14 +626,14 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
   <li>2026-09-07：找到 WSL2 的安装方法，<b>Docker 回归</b>，选型恢复起步文档口径；此前的嵌入式方案降级为"单机形态"备选，保留作为论文中的选型对比素材。</li>
 </ol>
 <div class="term"><b>WSL2</b>：Windows 内置的 Linux 子系统，可在其中运行完整的 Linux 环境与 Docker，解决 Windows 上无法直接安装 Docker 的问题。</div>
-<p>当前部署形态：Windows + WSL2 + Docker Compose，共九个容器（MySQL、Redis、RocketMQ NameServer 与 Broker、Canal Server、应用、网关、Prometheus、Grafana），镜像走国内加速前缀可配置替换。</p>
+<p>当前部署形态：Windows + WSL2 + Docker Compose，共十个容器（MySQL、Redis、RocketMQ NameServer 与 Broker、Canal Server、应用、网关、<b>前端 nginx</b>、Prometheus、Grafana），镜像走国内加速前缀可配置替换。</p>
 </section>
 
 <!-- ================= 12 测试与压测 ================= -->
 <section id="testing">
 <h2><span class="no">12</span>测试、压测与路线图</h2>
 
-<h3>12.1 自动化测试（96/96 通过）</h3>
+<h3>12.1 自动化测试（后端 96/96 + 前端 Vitest 15/15）</h3>
 <p>单元测试用 H2 内存数据库和内存桩替代外部中间件，不依赖本机 MySQL/Redis，任何环境可直接运行：</p>
 <table>
   <thead><tr><th>模块</th><th>数量</th><th>覆盖点（举例）</th></tr></thead>
@@ -686,24 +701,72 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
     <tr><td>阶段 A+</td><td>高可用加固（超时 / 熔断 / 防击穿）、双 Token 认证、日志体系，53 项测试</td><td><span class="badge ok">已完成</span></td></tr>
     <tr><td>阶段 H-1~H-4</td><td>WSL2/Docker 全栈部署、最小网关、JMeter 500 并发阶梯压测与调优</td><td><span class="badge ok">已完成</span></td></tr>
     <tr><td>阶段 B</td><td>真实 Binlog 同步链（Canal 1.1.7 + RocketMQ 4.9.4 容器版，写路径异步化削峰，外部直改库 250ms 同步缓存）</td><td><span class="badge ok">已完成</span></td></tr>
-    <tr><td>阶段 C</td><td>巡检引擎 + 补偿 SQL 自愈（hercules-inspector）</td><td><span class="badge plan">下一步</span></td></tr>
+    <tr><td>阶段 C</td><td>巡检引擎 + 补偿 SQL 自愈（hercules-inspector）</td><td><span class="badge plan">顺延（规划中）</span></td></tr>
+    <tr><td>阶段 D</td><td>多智能体对话入口（Spring AI + GLM glm-4.5-air：意图路由 / 推荐 / 冲突校验 / 确认制选课，SSE 流式）</td><td><span class="badge ok">已完成</span></td></tr>
     <tr><td>阶段 D</td><td>多智能体对话入口（Spring AI + GLM glm-4.5-air：意图路由 / 推荐 / 冲突校验 / 确认制选课，SSE 流式）</td><td><span class="badge ok">已完成</span></td></tr>
     <tr><td>阶段 E</td><td>RAG（Milvus 向量检索 + Neo4j 图检索）</td><td><span class="badge plan">下一步</span></td></tr>
-    <tr><td>阶段 E</td><td>RAG（Milvus 向量检索 + Neo4j 图检索）</td><td><span class="badge plan">规划中</span></td></tr>
     <tr><td>阶段 F</td><td>可观测性完善（链路追踪对接、大盘补充）</td><td><span class="badge plan">规划中</span></td></tr>
-    <tr><td>阶段 G</td><td>Vue3 双端前端（设计文档已就绪，编码未开始）</td><td><span class="badge plan">规划中</span></td></tr>
+    <tr><td>阶段 G</td><td>Vue3 双端前端（左侧菜单 + 顶栏布局，对话页 SSE 流式，nginx :8090）</td><td><span class="badge ok">已完成</span></td></tr>
     <tr><td>阶段 H-5</td><td>压测报告归档收尾、读路径 -19% 的单变量归因实验（可选）</td><td><span class="badge plan">规划中</span></td></tr>
   </tbody>
 </table>
 
-<h3>12.5 已记录的遗留问题</h3>
+<h3>12.5 已记录的遗留问题（2026-09-10 清理后更新）</h3>
 <ul>
-  <li>重复选课无约束：应用层与 <code>t_enrollment</code> 表均未拦截同一学生重复选同一门课；</li>
-  <li>分页参数无上限校验：过大的 <code>size</code> 可单页拉取全表；</li>
-  <li><code>t_cache_version</code> 的更新在多实例部署时需要加锁（当前单实例安全）；</li>
-  <li>500 错误响应携带原始异常消息，上线前需收敛为通用提示；</li>
-  <li>冲突合并的旧值依赖 L2，L2 逐出后退化为整体采用新值（见 5.4）。</li>
+  <li>~~重复选课无约束~~、~~分页无上限校验~~、~~500 泄漏细节~~、~~版本表多实例无锁~~：阶段清理轮已修复（第 12.1 节计数含回归）；</li>
+  <li>冲突合并的旧值依赖 L2，L2 逐出后退化为整体采用新值（见 5.4）；</li>
+  <li>Canal 消息不携带版本时钟：位点大幅回放最终收敛、过程短暂抖动；RocketMQ 重投为值级幂等（计数会虚增）；</li>
+  <li>对话会话历史为内存态（重启丢失，多实例需迁移 Redis）；</li>
+  <li>读路径 -19% 的单变量归因实验（可选，未排期）。</li>
 </ul>
+</section>
+
+<!-- ================= 13 前端设计 ================= -->
+<section id="frontend">
+<h2><span class="no">13</span>前端设计（hercules-ui）</h2>
+
+<div class="term"><b>技术栈</b>：Vue 3.5 + Vite 7 + TypeScript + Pinia 3 + Vue Router 4 + Element Plus + ECharts。
+<b>部署</b>：宿主 <code>npm run build</code> 产物由 nginx 容器（:8090）托管，<code>/api</code> 反代网关（SSE 关闭缓冲）。</div>
+
+<h3>13.1 布局与导航</h3>
+<p>双端一壳：登录后按角色进入学生端或管理端，共用一个布局组件——<b>左侧可折叠功能菜单</b>（按角色渲染）+ <b>顶部栏</b>（页面标题 + 用户下拉/退出登录）+ 内容区。</p>
+<table>
+  <thead><tr><th>端</th><th>左侧菜单</th><th>角色</th></tr></thead>
+  <tbody>
+    <tr><td>学生端</td><td>课程大厅 · 我的选课 · 对话助手</td><td>STUDENT</td></tr>
+    <tr><td>管理端</td><td>治理驾驶舱 · 课程管理 · 演示工具</td><td>ADMIN</td></tr>
+  </tbody>
+</table>
+
+<h3>13.2 页面与场景</h3>
+<table>
+  <thead><tr><th>页面</th><th>场景</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>登录页</td><td>进入系统</td><td>JWT 登录；role 由令牌 payload 预判（仅 UI 路由用，权限以后端为准）</td></tr>
+    <tr><td>课程大厅</td><td>浏览选课</td><td>关键字 + 分页；课程卡片（容量余量/已满标记）；选课确认弹窗（409 容量满/重复选课文案）</td></tr>
+    <tr><td>课程详情</td><td>决策辅助</td><td>完整信息（含先修/时间片）+ 选课入口，复用确认弹窗</td></tr>
+    <tr><td>我的选课</td><td>记录管理</td><td>有效选课列表 + 退课 + SVG 学分环（十进制合计）</td></tr>
+    <tr><td>对话助手</td><td>自然语言选课</td><td>SSE 流式逐字渲染；meta 候选卡（冲突标注）→「选课」按钮发起校验 → 校验通过渲染「确认选课」按钮 → 确认执行；停止生成（AbortController）</td></tr>
+    <tr><td>治理驾驶舱</td><td>运维监控</td><td>六宫格指标（命中率/L1/L2/回源/版本应用/冲突）+ 熔断状态标签 + 命中率趋势图，20s 轮询</td></tr>
+    <tr><td>演示工具</td><td>答辩演示</td><td>冲突模拟（LWW 合并）/ L1 失效（L2 回填）按钮组 + 结果展示</td></tr>
+  </tbody>
+</table>
+
+<h3>13.3 状态管理与数据流</h3>
+<p>Pinia 按领域分片五个 store：auth（令牌/档案）、course（列表/详情）、enrollment（选课/退课）、monitor（统计快照 + 轮询采样）、chat（消息流式状态机）。严格单向数据流：组件只读 state，写操作一律经 action 调用 api 层；R&lt;T&gt; 解包发生在 api 层；跨 store 依赖单向（enrollment → course）。</p>
+<p>认证存储策略：accessToken 仅内存（不落 localStorage，缩小 XSS 窗口），refreshToken 存 localStorage（7 天，服务端可吊销）；页面刷新后经 401 静默刷新恢复会话——<b>单飞语义</b>保证并发请求只触发一次刷新，失败统一跳登录（Vitest 覆盖）。</p>
+
+<h3>13.4 对话链路（前后端契约）</h3>
+<div class="flow">
+  <div class="fstep"><b>1</b>前端 POST /api/v1/chat（sessionId + message），响应用 SSE 分片推送</div>
+  <div class="farrow">↓</div>
+  <div class="fstep"><b>2</b>token 事件逐片到达 → 追加到最后一条 assistant 消息（流式渲染）</div>
+  <div class="farrow">↓</div>
+  <div class="fstep"><b>3</b>meta 事件（候选课程 + 冲突标注 / 选课校验结果）→ 渲染候选卡与操作按钮</div>
+  <div class="farrow">↓</div>
+  <div class="fstep"><b>4</b>流结束：助手全文入会话历史；error 事件兜底（LLM 故障已在后端降级为候选列表）</div>
+</div>
+<p>自研 SSE 解析器处理跨 chunk 粘包、多行 data 与 CRLF（15 个 Vitest 用例之一）；生成可随时中断（AbortController）。</p>
 </section>
 
 <!-- ================= 附录 ================= -->
@@ -718,8 +781,9 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
     <tr><td><code>开发文档/包结构说明.md</code></td><td>第 3、4、5 章（模块与类的职责）</td></tr>
     <tr><td><code>开发文档/认证设计.md</code></td><td>第 7 章（令牌规范、Redis 键、越权收敛）</td></tr>
     <tr><td><code>开发文档/日志设计.md</code></td><td>第 9 章（文件布局、审计、红线）</td></tr>
-    <tr><td><code>开发文档/测试报告.md</code></td><td>第 8、12 章（故障演练 §三、压测 §6.2~6.6）</td></tr>
+    <tr><td><code>开发文档/测试报告.md</code></td><td>第 8、12 章（故障演练 §三、压测 §6.2~6.6、清理 §七、Binlog §八、智能体 §九、前端 §十）</td></tr>
     <tr><td><code>开发文档/工作日志.md</code></td><td>第 5、6、11 章（机制实现细节、决策记录、遗留问题）</td></tr>
+    <tr><td><code>开发文档/前端设计.md</code></td><td>第 13 章（用户旅程、组件复用、状态分片）</td></tr>
     <tr><td><code>开发文档/项目介绍.md</code></td><td>第 1 章（量化数字出处索引）</td></tr>
   </tbody>
 </table>
