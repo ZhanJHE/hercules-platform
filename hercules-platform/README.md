@@ -7,9 +7,10 @@
 - **阶段 A+**：高可用加固（全链路超时/Redis 熔断降级/防击穿）+ 双 Token 认证 + 日志设计（traceId 贯通/审计落盘）；
 - **阶段 H-1~H-4**：WSL2/Docker 全栈部署（六容器）+ 最小网关（JWT 验签/透传头防伪造）+ JMeter 500 并发阶梯压测（5,027 req/s，错误率 0.0007%）与 JVM/连接池调优；
 - **阶段 B**：真实 Binlog 同步链（Canal 1.1.7 + RocketMQ 4.9.4，九容器栈）——`hercules.sync.transport=canal-mq` 切换，业务事务只落库，缓存刷新由 binlog 链路异步驱动（实测外部直改库 250ms 同步缓存）；
-- **阶段 D**：多智能体对话入口（Spring AI 1.0.6 + GLM glm-4.5-air）——意图路由（规则优先 + LLM 兜底）/ 推荐（候选检索 + 冲突标注 + LLM 流式生成）/ 排课冲突（纯规则）/ 确认制执行，SSE 流式，t_agent_trace 落库，LLM 故障 1s 降级。
+- **阶段 D**：多智能体对话入口（Spring AI 1.0.6 + GLM glm-4.5-air）——意图路由（规则优先 + LLM 兜底）/ 推荐（候选检索 + 冲突标注 + LLM 流式生成）/ 排课冲突（纯规则）/ 确认制执行，SSE 流式，t_agent_trace 落库，LLM 故障 1s 降级；
+- **阶段 G**：Vue3 双端前端（hercules-ui）——左侧功能菜单 + 顶部栏布局，课程大厅/我的选课/对话助手（SSE 流式 + 候选卡确认按钮）/治理驾驶舱（六宫格 + 命中率趋势）/演示工具；nginx 容器托管（:8090），十容器栈。
 
-自动化测试 **96/96 全绿**（common 4 + cache 21 + sync 36 + agent 13 + application 22，H2 + 内存桩 + LLM 脚本桩，不依赖本机中间件与网络）。
+自动化测试：后端 **96/96**（common 4 + cache 21 + sync 36 + agent 13 + application 22）+ 前端 **Vitest 15/15**（SSE 解析/401 单飞刷新/JWT 解码/学分计算），不依赖本机中间件与网络。
 
 > 单模块历史版本见 git 基线提交 `bfb4b6e`（原 `hercules/` 目录已退役删除）。
 > 网页版完整讲解见 `开发文档/项目讲解.html`。

@@ -196,20 +196,35 @@ public class AgentOrchestrator {
     }
 
     /**
-     * LLM 流式生成 + 降级：任何错误（超时/断网/解析）转为其结构化候选的纯文本，对话不中断。
+     * LLM 流式生成 + 双重降级：①错误 → 候选列表纯文本；②GLM 思考吃满 token 导致正文为空
+     * （token 分片数为 0）→ 流末尾自动补发候选列表，对话永不空手而归。
      *
      * @param ctx      对话上下文
      * @param prepared 推荐准备结果
-     * @return token 流（永不 error）
+     * @return token 流（永不 error、永不为空）
      */
     private Flux<String> llmStreamWithFallback(AgentContext ctx, RecommendationAgent.Prepared prepared) {
+        java.util.concurrent.atomic.AtomicBoolean received = new java.util.concurrent.atomic.AtomicBoolean(false);
         return llm.stream(prepared.systemPrompt(), prepared.userPrompt())
+                .doOnNext(token -> {
+                    if (!received.get() && !token.isBlank()) {
+                        received.set(true);
+                    }
+                })
                 .onErrorResume(e -> {
                     log.warn("[hercules-agent] llm stream failed, fallback to plain list: {}", e.getMessage());
+                    // 标记已发内容：避免下方 concat 空正文兜底重复追加
+                    received.set(true);
                     return Flux.just(prepared.fallbackText());
                 })
+                // 空正文兜底：GLM thinking 吃满 token 时 content 为空（流正常完成但无 token）
+                .concatWith(Flux.defer(() -> received.get()
+                        ? Flux.empty()
+                        : Flux.just(prepared.fallbackText())))
                 .doOnComplete(() -> traceWriter.write(ctx, AgentType.RECOMMENDATION,
-                        ctx.message(), "(流式推荐，候选 " + prepared.recommendations().size() + " 条)", true));
+                        ctx.message(), received.get()
+                                ? "(流式推荐，候选 " + prepared.recommendations().size() + " 条)"
+                                : "(LLM 空响应，降级候选列表 " + prepared.recommendations().size() + " 条)", true));
     }
 
     /**

@@ -1,0 +1,7 @@
+# 阶段 G：hercules-ui 前端镜像（宿主预构建 dist → nginx 托管）
+# 前置：hercules-ui 下 `npm run build`（产物 dist/ 已含 vue-tsc 类型检查）
+# 取舍：容器内 npm ci 在受限网络下超时（实测 600s+），改为宿主构建 + 单阶段镜像
+FROM ${BASE_IMAGE:-docker.m.daocloud.io}/library/nginx:1.27-alpine
+COPY deploy/ui/nginx.conf /etc/nginx/conf.d/default.conf
+COPY hercules-ui/dist /usr/share/nginx/html
+EXPOSE 80

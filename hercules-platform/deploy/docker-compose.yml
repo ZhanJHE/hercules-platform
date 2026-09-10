@@ -105,6 +105,21 @@ services:
       retries: 20
       start_period: 30s
 
+  # ===== 阶段 G：hercules-ui 前端（静态托管 + /api 反代网关，SSE 无缓冲）=====
+  ui:
+    image: hercules-ui:dev
+    build:
+      context: ..
+      dockerfile: Dockerfile-ui
+      args:
+        BASE_IMAGE: ${DOCKER_MIRROR:-docker.m.daocloud.io}/library/node:22-alpine
+    container_name: hercules-ui
+    depends_on:
+      gateway:
+        condition: service_healthy
+    ports:
+      - "8090:80"                   # 浏览器入口 http://localhost:8090
+
   prometheus:
     image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/prom/prometheus:latest
     container_name: hercules-prometheus

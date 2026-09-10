@@ -19,7 +19,7 @@ Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层
 - **L3 多智能体决策层**：路由 / 推荐 / 排课冲突 / 执行四类智能体协作（规划中）；
 - **L4 用户接入层**：Spring Cloud Gateway + Vue3 双端界面（规划中）。
 
-当前已完成**分布式缓存一致性治理核心**的可运行实现：课程查询走多级缓存、数据变更后由同步链刷新缓存、并发写冲突走字段级 LWW 合并，全链路可观测、可演示、96 个自动化测试全覆盖；并已完成双 Token 认证、独立网关、WSL2/Docker 全栈部署（九容器）、500 并发压测（5,027 req/s，错误率 0.0007%）、**真实 Binlog 同步链**（Canal 1.1.7 + RocketMQ 4.9.4，外部直改数据库 250ms 内同步缓存），以及**多智能体对话入口**（Spring AI 1.0.6 + 智谱 GLM glm-4.5-air，自然语言推荐/冲突校验/确认制选课）。
+当前已完成**分布式缓存一致性治理核心**的可运行实现：课程查询走多级缓存、数据变更后由同步链刷新缓存、并发写冲突走字段级 LWW 合并，全链路可观测、可演示，后端 96 个 + 前端 15 个自动化测试全覆盖；并已完成双 Token 认证、独立网关、WSL2/Docker 全栈部署（十容器）、500 并发压测（5,027 req/s，错误率 0.0007%）、**真实 Binlog 同步链**（Canal 1.1.7 + RocketMQ 4.9.4，外部直改数据库 250ms 内同步缓存）、**多智能体对话入口**（Spring AI 1.0.6 + 智谱 GLM glm-4.5-air），以及 **Vue3 双端前端**（Element Plus + Pinia + SSE 流式对话 + 治理驾驶舱，http://localhost:8090）。
 
 ## ✨ 核心特性
 
@@ -52,7 +52,7 @@ Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层
 | 智能体 | Spring AI（OpenAI 兼容接入智谱 GLM） | 1.0.6 / glm-4.5-air | **阶段 D 已接入**：意图路由 / 推荐 / 排课冲突（纯规则）/ 确认制执行，SSE 流式对话，t_agent_trace 全程落库 |
 | RAG（规划） | 向量检索 + Neo4j | Spring AI VectorStore / 5.x | 向量检索（预留 Milvus 扩展点）+ 图检索 |
 | 网关 | Spring Cloud Gateway | 2025.0.3 | ✅ 已接入：路由 / JWT 验签 / traceId 下发 |
-| 前端（规划） | Vue 3 + Vite + Element Plus + ECharts | 3.4+ | 学生端对话助手 + 治理驾驶舱 |
+| 前端 | Vue 3.5 + Vite 7 + Element Plus + Pinia | 3.5 / 7 / 2.x | **阶段 G 已接入**：左侧菜单 + 顶栏双端布局，课程/选课/对话（SSE 流式）/治理驾驶舱，nginx 容器托管（:8090） |
 
 ## 🏗 项目结构
 
@@ -153,7 +153,7 @@ java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
 | 阶段 D | Spring AI 多智能体（路由/推荐/排课/执行，GLM glm-4.5-air，SSE 流式 + 确认制选课） | ✅ |
 | 阶段 E | RAG（向量检索 + Neo4j 图检索） | ⏳ 下一步 |
 | 阶段 F | 可观测性大盘完善（Prometheus + 链路追踪 + Grafana） | ⏳ |
-| 阶段 G | Vue3 双端前端（AI 选课助手 + 治理驾驶舱） | ⏳ |
+| 阶段 G | Vue3 双端前端（左侧菜单 + 顶栏布局，对话页 SSE 流式，驾驶舱 20s 轮询） | ✅ |
 | 阶段 H-5 | 压测报告收尾与可选单变量归因实验 | ⏳ |
 
 ## 📚 文档

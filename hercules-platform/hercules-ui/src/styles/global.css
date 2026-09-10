@@ -1,0 +1,17 @@
+/* 全局基础样式（阶段 G）：简洁浅色风格 */
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  background: #f5f7fa;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #1f2328;
+}
+
+.page-card {
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
