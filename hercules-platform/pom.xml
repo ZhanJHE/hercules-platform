@@ -35,10 +35,19 @@
 		<resilience4j.version>2.4.0</resilience4j.version>
 		<jjwt.version>0.13.0</jjwt.version>
 		<rocketmq-client.version>4.9.4</rocketmq-client.version>
+		<spring-ai.version>1.0.6</spring-ai.version>
 	</properties>
 
 	<dependencyManagement>
 		<dependencies>
+			<!-- 阶段 D：Spring AI BOM（OpenAI 兼容接入 GLM） -->
+			<dependency>
+				<groupId>org.springframework.ai</groupId>
+				<artifactId>spring-ai-bom</artifactId>
+				<version>${spring-ai.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
 			<dependency>
 				<groupId>com.baomidou</groupId>
 				<artifactId>mybatis-plus-spring-boot3-starter</artifactId>

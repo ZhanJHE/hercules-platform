@@ -76,6 +76,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(WHITELIST).permitAll()
                         .requestMatchers("/api/v1/auth/logout").authenticated()
+                        .requestMatchers("/api/v1/chat/**").authenticated()  // 阶段 D：自然语言对话（登录即可，执行侧再校验 STUDENT）
                         .requestMatchers("/api/v1/enrollment/**").hasRole("STUDENT")
                         .requestMatchers("/api/v1/cache/stats", "/api/v1/debug/**").hasRole("ADMIN")
                         .requestMatchers("/actuator/**").hasRole("ADMIN")

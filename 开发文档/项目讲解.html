@@ -134,7 +134,7 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
 <div class="term"><b>缓存</b>：把从数据库读出的数据临时存放在更快的存储（内存或 Redis）里，之后的相同读取直接取用，不必再查数据库。
 <b>一致性</b>：缓存里的数据与数据库里的数据保持相同。<b>最终一致性</b>：允许数据在极短时间内不一致（例如 10 秒），但保证此后恢复一致。</div>
 
-<p>项目按"四层分离"的结构组织（见第 2 章），目前<b>已完成</b>的部分是：缓存一致性治理核心（多级缓存 + 向量时钟同步链）、登录认证、高可用防护、独立网关、日志体系，以及 500 并发压测验证。<b>计划中</b>的部分是：多智能体决策、RAG 检索、巡检自愈、Vue3 前端。</p>
+<p>项目按"四层分离"的结构组织（见第 2 章），目前<b>已完成</b>的部分是：缓存一致性治理核心（多级缓存 + 向量时钟同步链）、登录认证、高可用防护、独立网关、日志体系、500 并发压测验证、真实 Binlog 同步链（Canal + RocketMQ），以及多智能体对话入口（自然语言推荐 / 冲突校验 / 确认制选课）。<b>计划中</b>的部分是：RAG 检索、巡检自愈、可观测性完善、Vue3 前端。</p>
 
 <h3>1.1 基本信息</h3>
 <table>
@@ -144,7 +144,7 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
     <tr><td>核心框架</td><td>Spring Boot 3.5.16</td></tr>
     <tr><td>工程结构</td><td>Maven 多模块，11 个模块（3.9.16 wrapper 构建）</td></tr>
     <tr><td>数据存储</td><td>MySQL 8（业务数据）+ Redis 7（分布式缓存）</td></tr>
-    <tr><td>自动化测试</td><td>79/79 通过，不依赖外部中间件（《测试报告》§一、§八）</td></tr>
+    <tr><td>自动化测试</td><td>96/96 通过，不依赖外部中间件与网络（《测试报告》§一、§八、§九）</td></tr>
     <tr><td>压测结果</td><td>500 并发稳定 10 分钟，5,027 请求/秒，错误率 0.0007%（《测试报告》§6.2）</td></tr>
     <tr><td>部署形态</td><td>Windows + WSL2 + Docker Compose，九个容器（MySQL / Redis / RocketMQ×2 / Canal / 应用 / 网关 / Prometheus / Grafana）</td></tr>
   </tbody>
@@ -168,7 +168,7 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
   <div class="layer">
     <div class="lname">L3 多智能体决策层</div>
     <div class="ldesc">学生用自然语言提问，由四类智能体分工完成：路由（判断意图）、推荐（挑选课程）、排课冲突（检查时间与先修课约束）、执行（调用选课接口）。</div>
-    <div class="lbadges"><span class="badge plan">规划中（阶段 D）</span></div>
+    <div class="lbadges"><span class="badge ok">对话入口已实现（阶段 D）</span></div>
   </div>
   <div class="layer core">
     <div class="lname">L2 一致性治理层（本项目的核心）</div>
@@ -213,7 +213,7 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
     <tr><td><code>hercules-application</code></td><td>唯一可执行应用：REST 接口、安全配置、启动类、种子数据</td><td>已实现（17 个类）</td></tr>
     <tr><td><code>hercules-gateway</code></td><td>独立网关：JWT 验签、透传头注入、traceId 下发</td><td>已实现最小版（4 个类）</td></tr>
     <tr><td><code>hercules-inspector</code></td><td>巡检自愈：定时比对缓存与数据库、生成修复 SQL</td><td>空模块（阶段 C 填充）</td></tr>
-    <tr><td><code>hercules-agent</code></td><td>多智能体：四类智能体的定义与协作</td><td>空模块（阶段 D 填充）</td></tr>
+    <tr><td><code>hercules-agent</code></td><td>多智能体：四类智能体的定义与协作</td><td>已实现（13 类，阶段 D）</td></tr>
     <tr><td><code>hercules-rag</code></td><td>RAG 检索：课程文档向量化与检索</td><td>空模块（阶段 E 填充）</td></tr>
     <tr><td><code>hercules-observability</code></td><td>可观测性聚合：链路追踪配置、指标汇总</td><td>空模块（阶段 F 填充）</td></tr>
     <tr><td><code>hercules-admin</code></td><td>管控台后端：运维接口、健康度计算</td><td>空模块（规划）</td></tr>
@@ -543,7 +543,7 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
     <tr><td><code>t_user</code></td><td>用户</td><td>用户名（唯一）、BCrypt 密码、角色（STUDENT / ADMIN）、学号</td><td>使用中</td></tr>
     <tr><td><code>t_cache_version</code></td><td>缓存版本</td><td>缓存键（唯一）、节点名、当前版本号、向量时钟 JSON</td><td>使用中（同步链判定依据）</td></tr>
     <tr><td><code>t_repair_log</code></td><td>修复日志</td><td>差异两端值、冲突类型、补偿 SQL、修复状态</td><td>占位（阶段 C 启用）</td></tr>
-    <tr><td><code>t_agent_trace</code></td><td>智能体调用记录</td><td>traceId、会话、输入输出、模型、耗时</td><td>占位（阶段 D 启用）</td></tr>
+    <tr><td><code>t_agent_trace</code></td><td>智能体调用记录</td><td>traceId、会话、输入输出、模型、耗时</td><td>使用中（阶段 D）</td></tr>
   </tbody>
 </table>
 
@@ -597,7 +597,7 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
   <thead><tr><th>组件</th><th>阶段</th><th>用途</th></tr></thead>
   <tbody>
     <tr><td>Canal + RocketMQ</td><td>阶段 B（✅ 已接入）</td><td>真实 Binlog 同步链：监听数据库变更，经消息队列异步刷新缓存（写路径削峰）；实测外部直改库 250ms 同步缓存</td></tr>
-    <tr><td>Spring AI</td><td>阶段 D</td><td>四类智能体（路由 / 推荐 / 排课冲突 / 执行）的模型接入与编排</td></tr>
+    <tr><td>Spring AI</td><td>阶段 D（✅ 已接入）</td><td>四类智能体（路由 / 推荐 / 排课冲突 / 执行）的模型接入与编排；GLM glm-4.5-air 经 OpenAI 兼容协议</td></tr>
     <tr><td>Milvus + Neo4j</td><td>阶段 E</td><td>向量检索（课程语义搜索）与图检索（先修课、培养方案关系）</td></tr>
     <tr><td>Vue 3 + Element Plus + ECharts</td><td>阶段 G</td><td>学生端对话助手与治理驾驶舱界面</td></tr>
   </tbody>
@@ -618,7 +618,7 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
 <section id="testing">
 <h2><span class="no">12</span>测试、压测与路线图</h2>
 
-<h3>12.1 自动化测试（79/79 通过）</h3>
+<h3>12.1 自动化测试（96/96 通过）</h3>
 <p>单元测试用 H2 内存数据库和内存桩替代外部中间件，不依赖本机 MySQL/Redis，任何环境可直接运行：</p>
 <table>
   <thead><tr><th>模块</th><th>数量</th><th>覆盖点（举例）</th></tr></thead>
@@ -687,7 +687,8 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
     <tr><td>阶段 H-1~H-4</td><td>WSL2/Docker 全栈部署、最小网关、JMeter 500 并发阶梯压测与调优</td><td><span class="badge ok">已完成</span></td></tr>
     <tr><td>阶段 B</td><td>真实 Binlog 同步链（Canal 1.1.7 + RocketMQ 4.9.4 容器版，写路径异步化削峰，外部直改库 250ms 同步缓存）</td><td><span class="badge ok">已完成</span></td></tr>
     <tr><td>阶段 C</td><td>巡检引擎 + 补偿 SQL 自愈（hercules-inspector）</td><td><span class="badge plan">下一步</span></td></tr>
-    <tr><td>阶段 D</td><td>Spring AI 多智能体（路由 / 推荐 / 排课冲突 / 执行）</td><td><span class="badge plan">规划中</span></td></tr>
+    <tr><td>阶段 D</td><td>多智能体对话入口（Spring AI + GLM glm-4.5-air：意图路由 / 推荐 / 冲突校验 / 确认制选课，SSE 流式）</td><td><span class="badge ok">已完成</span></td></tr>
+    <tr><td>阶段 E</td><td>RAG（Milvus 向量检索 + Neo4j 图检索）</td><td><span class="badge plan">下一步</span></td></tr>
     <tr><td>阶段 E</td><td>RAG（Milvus 向量检索 + Neo4j 图检索）</td><td><span class="badge plan">规划中</span></td></tr>
     <tr><td>阶段 F</td><td>可观测性完善（链路追踪对接、大盘补充）</td><td><span class="badge plan">规划中</span></td></tr>
     <tr><td>阶段 G</td><td>Vue3 双端前端（设计文档已就绪，编码未开始）</td><td><span class="badge plan">规划中</span></td></tr>

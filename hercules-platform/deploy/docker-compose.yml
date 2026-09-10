@@ -52,8 +52,11 @@ services:
       # ===== 阶段 B：真实 Binlog 同步链 =====
       HERCULES_SYNC_TRANSPORT: canal-mq                        # 事务内不再发布版本事件，由 binlog 链路触发刷缓存
       HERCULES_SYNC_ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
+      # ===== 阶段 D：GLM 多智能体（Key 经 deploy/.env 注入，勿提交）=====
+      SPRING_AI_OPENAI_API_KEY: ${GLM_API_KEY:?GLM_API_KEY missing (deploy/.env)}
       # JVM 显式调优（阶段H-4调研）：默认自适应为 Xms250M/Xmx4G——起步过小、上限过大；G1 保留+暂停目标；GC 日志供论文取证
-      JAVA_TOOL_OPTIONS: "-Xms1g -Xmx2g -XX:+AlwaysPreTouch -XX:MaxGCPauseMillis=50 -Xlog:gc*:file=/app/logs/gc.log:time,uptime:filecount=5,filesize=20m"
+      # preferIPv4Stack：容器内 JVM 对 GLM 端点的连接路径固定走 IPv4（阶段D排障）
+      JAVA_TOOL_OPTIONS: "-Xms1g -Xmx2g -XX:+AlwaysPreTouch -XX:MaxGCPauseMillis=50 -Djava.net.preferIPv4Stack=true -Xlog:gc*:file=/app/logs/gc.log:time,uptime:filecount=5,filesize=20m"
     depends_on:
       mysql:
         condition: service_healthy

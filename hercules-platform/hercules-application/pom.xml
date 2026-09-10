@@ -25,7 +25,12 @@
 			<groupId>com.zhanjh</groupId>
 			<artifactId>hercules-sync</artifactId>
 		</dependency>
-		<!-- 阶段 C/D/E/F 填充后依次加入：inspector / agent / rag / observability / admin -->
+		<!-- 阶段 D：多智能体编排（端口适配 + 对话端点） -->
+		<dependency>
+			<groupId>com.zhanjh</groupId>
+			<artifactId>hercules-agent</artifactId>
+		</dependency>
+		<!-- 阶段 C/E/F 填充后依次加入：inspector / rag / observability / admin -->
 
 		<!-- Spring Boot Web 栈 -->
 		<dependency>

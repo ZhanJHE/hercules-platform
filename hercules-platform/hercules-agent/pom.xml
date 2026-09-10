@@ -9,5 +9,25 @@
 	</parent>
 	<artifactId>hercules-agent</artifactId>
 	<name>hercules-agent</name>
-	<description>多智能体决策模块：路由/推荐/排课/执行四类智能体与编排引擎（阶段 D 填充）</description>
+	<description>多智能体决策模块：路由/推荐/排课/执行四类智能体与编排引擎（阶段 D）</description>
+
+	<dependencies>
+		<!-- 模型与 trace 落库依赖的实体/Mapper（AgentTraceMapper 继承 BaseMapper） -->
+		<dependency>
+			<groupId>com.zhanjh</groupId>
+			<artifactId>hercules-common</artifactId>
+		</dependency>
+		<!-- Spring AI：OpenAI 兼容接入（GLM open.bigmodel.cn /api/paas/v4） -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-openai</artifactId>
+		</dependency>
+		<!-- 业务端口（CourseQueryPort/EnrollmentPort）由 application 适配实现，本模块只声明接口 -->
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
 </project>

@@ -5,6 +5,11 @@ spring:
     driver-class-name: org.h2.Driver
     username: sa
     password: ""
+  ai:
+    openai:
+      # 测试占位 Key：Spring AI 自动装配需要非空 api-key 才能构建客户端 Bean；
+      # 测试中 LlmPort 一律被 StubLlmPort(@Primary) 替换，该 Key 永远不会用于真实调用
+      api-key: "test-dummy-key"
 
 # 测试专用 JWT 密钥（仅 H2 冒烟/认证流测试使用）
 hercules:

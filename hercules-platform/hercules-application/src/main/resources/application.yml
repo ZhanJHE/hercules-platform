@@ -19,10 +19,28 @@ spring:
 server:
   port: 8080
 
+# ===== 阶段 D：SSE 异步与 Security 的兼容配置 =====
+# Security 过滤器链只在 REQUEST/ERROR 转发类型执行——SSE 的 ASYNC 转发不再重跑授权
+# （自定义 JwtAuthenticationFilter 为 OncePerRequest，ASYNC 时被跳过会导致匿名 → 已提交响应上二次拒绝）。
+# 无状态 JWT 场景下授权已在初始请求完成，异步续传无需重检。
+spring.security.filter.dispatcher-types: request,error
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     default-statement-timeout: 3  # 所有 SQL 默认语句超时（秒），防慢查询占住连接与线程
+
+# ===== 阶段 D：Spring AI（GLM OpenAI 兼容接入）=====
+# api-key 经 application-local.yml / GLM_API_KEY 环境变量提供，勿提交
+spring.ai:
+  openai:
+    base-url: https://open.bigmodel.cn/api/paas
+    chat:
+      completions-path: /v4/chat/completions
+      options:
+        model: glm-4.5-air
+        temperature: 0.7
+        max-tokens: 1024
 
 management:
   endpoints:
@@ -46,6 +64,10 @@ hercules:
       name-server: localhost:9876
       topic: hercules-binlog-topic
       consumer-group: hercules-cache-sync
+  agent:                 # 阶段 D：多智能体编排参数
+    model: glm-4.5-air   # 对话/推荐/意图兜底使用的模型（与 spring.ai.openai 同源）
+    enabled: true        # 总开关（false 时 chat 端点返回固定降级提示）
+    history-limit: 20    # 内存会话历史上限（轮）
   auth:
     access-ttl: 30m        # Access Token（JWT）有效期
     refresh-ttl: 7d        # Refresh Token（Redis）有效期

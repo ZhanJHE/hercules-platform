@@ -26,6 +26,7 @@ hercules-platform/loadtest/reports/
 
 # --- 本机私有配置（真实凭据，勿提交） ---
 application-local.yml
+deploy/.env
 
 # --- OS ---
 Thumbs.db
