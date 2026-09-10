@@ -10,10 +10,12 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --binlog-format=ROW          # 阶段 B：Canal/嵌入式 Binlog 连接器前置条件
+      - --binlog-row-image=FULL      # 阶段 B：变更前/后镜像完整记录（MySQL 8 默认值，显式声明防漂移）
       - --log-bin=mysql-bin
       - --server-id=1
     volumes:
       - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro   # canal 账号（存量卷需手动执行一次，见脚本注记）
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot123"]
       interval: 5s
@@ -47,6 +49,9 @@ services:
       HERCULES_LOADTEST_SEED: "true"             # 启动时播种 5000 门压测课程
       HERCULES_LOADTEST_COURSE_COUNT: "5000"
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "40"   # 阶段H-4压测实证：20连接在150写并发下饱和(waiting=116)
+      # ===== 阶段 B：真实 Binlog 同步链 =====
+      HERCULES_SYNC_TRANSPORT: canal-mq                        # 事务内不再发布版本事件，由 binlog 链路触发刷缓存
+      HERCULES_SYNC_ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
       # JVM 显式调优（阶段H-4调研）：默认自适应为 Xms250M/Xmx4G——起步过小、上限过大；G1 保留+暂停目标；GC 日志供论文取证
       JAVA_TOOL_OPTIONS: "-Xms1g -Xmx2g -XX:+AlwaysPreTouch -XX:MaxGCPauseMillis=50 -Xlog:gc*:file=/app/logs/gc.log:time,uptime:filecount=5,filesize=20m"
     depends_on:
@@ -54,6 +59,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rocketmq-broker:
+        condition: service_started
     ports:
       - "8080:8080"                  # 直连调试用（压测经网关 8081）
     mem_limit: 3g                    # JVM(2g堆)+元空间+堆外+线程栈的预算上限，隔离与 gateway/MySQL 的邻居效应
@@ -105,6 +112,53 @@ services:
     depends_on:
       - app
       - gateway
+
+  # ===== 阶段 B：真实 Binlog 同步链（MySQL binlog → canal → RocketMQ → app 消费者）=====
+  rocketmq-namesrv:
+    image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/apache/rocketmq:4.9.4
+    container_name: hercules-rocketmq-namesrv
+    command: ["sh", "mqnamesrv"]
+    environment:
+      # 镜像默认 JVM 8g 不可接受，显式压小（开发单机口径）
+      JAVA_OPT_EXT: "-Xms256m -Xmx256m -Xmn128m"
+    mem_limit: 512m
+
+  rocketmq-broker:
+    image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/apache/rocketmq:4.9.4
+    container_name: hercules-rocketmq-broker
+    command: ["sh", "mqbroker", "-n", "rocketmq-namesrv:9876", "-c", "/home/rocketmq/broker.conf"]
+    environment:
+      JAVA_OPT_EXT: "-Xms512m -Xmx512m -Xmn128m"
+    volumes:
+      - ./rocketmq/broker.conf:/home/rocketmq/broker.conf:ro
+    depends_on:
+      - rocketmq-namesrv
+    mem_limit: 768m
+
+  canal-server:
+    image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/canal/canal-server:v1.1.7
+    container_name: hercules-canal
+    environment:
+      canal.destinations: hercules
+      canal.instance.master.address: mysql:3306
+      canal.instance.dbUsername: canal
+      canal.instance.dbPassword: canal
+      canal.instance.connectionCharset: UTF-8
+      canal.instance.filter.regex: "hercules\\.t_course"
+      # MQ 模式：canal 直接投递 RocketMQ，应用侧不依赖 canal client
+      canal.serverMode: rocketmq
+      canal.mq.servers: rocketmq-namesrv:9876
+      canal.mq.flatMessage: "true"
+      canal.mq.topic: hercules-binlog-topic
+      # 分区数必须显式配置：partitionHash 分支对 partitionsNum 拆箱，缺省 null 直接 NPE（实测 1.1.7）
+      canal.mq.partitionsNum: "8"
+      canal.mq.partitionHash: .*\\..*$$pk$$
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rocketmq-broker:
+        condition: service_started
+    mem_limit: 1g
 
   grafana:
     image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/grafana/grafana:latest

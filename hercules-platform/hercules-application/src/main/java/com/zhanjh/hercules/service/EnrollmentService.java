@@ -267,9 +267,15 @@ public class EnrollmentService {
      * <p>事务提交后由 VersionChangeEventListener（AFTER_COMMIT，fallbackExecution 兼容无事务调用方）
      * 驱动 VersionChangeConsumer 消费；事务回滚则事件不被消费，缓存保持旧值。
      *
+     * <p>阶段 B：transport=canal-mq 时本方法整体短路——binlog 链路是同步触发源，
+     * 事务内不重读行、不加载时钟（写路径削峰）；in-process 传输（默认/单机/测试）保持原语义。
+     *
      * @param courseId 课程 ID
      */
     private void publishCourseVersion(Long courseId) {
+        if (syncProps.isCanalMq()) {
+            return;
+        }
         // 同事务重读：读到的是本事务未提交的最新状态（含本次变更后的已选人数）
         Course fresh = courseMapper.selectById(courseId);
         String key = CacheKeys.course(courseId);

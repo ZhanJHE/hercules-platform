@@ -19,7 +19,7 @@ Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层
 - **L3 多智能体决策层**：路由 / 推荐 / 排课冲突 / 执行四类智能体协作（规划中）；
 - **L4 用户接入层**：Spring Cloud Gateway + Vue3 双端界面（规划中）。
 
-当前已完成**分布式缓存一致性治理核心**的可运行实现：课程查询走多级缓存、选课事务提交后由同步链刷新缓存、并发写冲突走字段级 LWW 合并，全链路可观测、可演示、67 个自动化测试全覆盖；并已完成双 Token 认证、独立网关、WSL2/Docker 全栈部署与 500 并发压测（5,027 req/s，错误率 0.0007%）。
+当前已完成**分布式缓存一致性治理核心**的可运行实现：课程查询走多级缓存、数据变更后由同步链刷新缓存、并发写冲突走字段级 LWW 合并，全链路可观测、可演示、79 个自动化测试全覆盖；并已完成双 Token 认证、独立网关、WSL2/Docker 全栈部署、500 并发压测（5,027 req/s，错误率 0.0007%），以及**真实 Binlog 同步链**（Canal 1.1.7 + RocketMQ 4.9.4，外部直改数据库 250ms 内同步缓存）。
 
 ## ✨ 核心特性
 
@@ -48,10 +48,10 @@ Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层
 | 认证 | Spring Security + jjwt | 6.5 / 0.13.0 | 双 Token（JWT + Refresh）、BCrypt、jti 黑名单 |
 | 测试 | JUnit 5 + Mockito + AssertJ + MockMvc | Boot BOM 管理 | 单元 / 集成 / 端到端冒烟 |
 | 测试数据库 | H2 | 2.3.x（test scope） | MySQL 兼容模式内存库 |
-| 同步链传输（规划） | mysql-binlog-connector-java（嵌入式） | 最新稳定 | 直连本机 MySQL Binlog，替换进程内事件总线（Canal/RocketMQ 见选型变更记录） |
+| 同步链传输 | Canal 1.1.7 + RocketMQ 4.9.4（容器化） | **阶段 B 已接入**：MySQL ROW Binlog → Canal Server（MQ 模式投递 flatMessage）→ RocketMQ 顺序队列 → 应用消费者；`hercules.sync.transport` 可切回进程内总线（单机/测试形态） |
 | 智能体（规划） | Spring AI（OpenAI 兼容接入） | 1.x | 路由 / 推荐 / 排课 / 执行四类智能体 |
-| RAG（规划） | 嵌入式向量检索 + Neo4j | Spring AI VectorStore / 5.x | 向量检索（预留 Milvus 扩展点）+ 图检索 |
-| 网关（规划） | Spring Cloud Gateway | 2025.0.x | 路由 / JWT 鉴权 / 限流 |
+| RAG（规划） | 向量检索 + Neo4j | Spring AI VectorStore / 5.x | 向量检索（预留 Milvus 扩展点）+ 图检索 |
+| 网关 | Spring Cloud Gateway | 2025.0.3 | ✅ 已接入：路由 / JWT 验签 / traceId 下发 |
 | 前端（规划） | Vue 3 + Vite + Element Plus + ECharts | 3.4+ | 学生端对话助手 + 治理驾驶舱 |
 
 ## 🏗 项目结构
@@ -148,8 +148,8 @@ java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
 | 阶段 A | Maven 多模块化重构（11 模块） | ✅ |
 | 阶段 A+ | 高可用加固（超时/熔断/防击穿）+ 双 Token 认证 + 日志设计 | ✅ |
 | 阶段 H-1~H-4 | WSL2/Docker 全栈部署 + 最小网关 + JMeter 500 并发阶梯压测与调优 | ✅ |
-| 阶段 B | 真实 Binlog 同步链（Canal + RocketMQ 容器版，写路径异步化削峰） | ⏳ 下一步 |
-| 阶段 C | 巡检引擎 + 补偿 SQL 自愈 | ⏳ |
+| 阶段 B | 真实 Binlog 同步链（Canal 1.1.7 + RocketMQ 4.9.4 容器版，写路径异步化削峰） | ✅ |
+| 阶段 C | 巡检引擎 + 补偿 SQL 自愈 | ⏳ 下一步 |
 | 阶段 D | Spring AI 多智能体（路由/推荐/排课/执行） | ⏳ |
 | 阶段 E | RAG（向量检索 + Neo4j 图检索） | ⏳ |
 | 阶段 F | 可观测性大盘完善（Prometheus + 链路追踪 + Grafana） | ⏳ |

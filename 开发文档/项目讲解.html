@@ -144,9 +144,9 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
     <tr><td>核心框架</td><td>Spring Boot 3.5.16</td></tr>
     <tr><td>工程结构</td><td>Maven 多模块，11 个模块（3.9.16 wrapper 构建）</td></tr>
     <tr><td>数据存储</td><td>MySQL 8（业务数据）+ Redis 7（分布式缓存）</td></tr>
-    <tr><td>自动化测试</td><td>53/53 通过，不依赖外部中间件（《测试报告》§一）</td></tr>
+    <tr><td>自动化测试</td><td>79/79 通过，不依赖外部中间件（《测试报告》§一、§八）</td></tr>
     <tr><td>压测结果</td><td>500 并发稳定 10 分钟，5,027 请求/秒，错误率 0.0007%（《测试报告》§6.2）</td></tr>
-    <tr><td>部署形态</td><td>Windows + WSL2 + Docker Compose，六个容器（MySQL / Redis / 应用 / 网关 / Prometheus / Grafana）</td></tr>
+    <tr><td>部署形态</td><td>Windows + WSL2 + Docker Compose，九个容器（MySQL / Redis / RocketMQ×2 / Canal / 应用 / 网关 / Prometheus / Grafana）</td></tr>
   </tbody>
 </table>
 
@@ -327,7 +327,7 @@ footer{margin-top:72px; padding-top:18px; border-top:2px solid var(--line); font
 
 <h3>5.4 当前形态与已知边界</h3>
 <ul>
-  <li><b>当前传输方式</b>：消息在本进程内传递（Spring 事件总线），单节点下顺序有保证。阶段 B 计划替换为 Canal 监听 MySQL Binlog + RocketMQ 队列，消息载荷结构不变，消费端判定逻辑复用。</li>
+  <li><b>当前传输方式</b>：两种可切换——`in-process`（默认）：消息在本进程内传递（Spring 事件总线），单节点下顺序有保证；`canal-mq`（阶段 B 已接入）：MySQL Binlog → Canal Server（MQ 模式投递）→ RocketMQ 顺序队列 → 应用消费者，业务事务只落库，缓存刷新完全异步。两种模式下消费端判定逻辑完全复用。</li>
   <li><b>已知限制</b>（记录于《工作日志》已知事项 #9）：冲突合并时旧值取自 L2；如果该键恰好已从 L2 逐出，合并退化为整体采用新值，仅存在于旧值中的字段会丢失。此限制已知、已记录，待后续版本处理。</li>
 </ul>
 
@@ -596,7 +596,7 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
 <table>
   <thead><tr><th>组件</th><th>阶段</th><th>用途</th></tr></thead>
   <tbody>
-    <tr><td>Canal + RocketMQ</td><td>阶段 B</td><td>真实 Binlog 同步链：监听数据库变更，经消息队列异步刷新缓存（写路径削峰）</td></tr>
+    <tr><td>Canal + RocketMQ</td><td>阶段 B（✅ 已接入）</td><td>真实 Binlog 同步链：监听数据库变更，经消息队列异步刷新缓存（写路径削峰）；实测外部直改库 250ms 同步缓存</td></tr>
     <tr><td>Spring AI</td><td>阶段 D</td><td>四类智能体（路由 / 推荐 / 排课冲突 / 执行）的模型接入与编排</td></tr>
     <tr><td>Milvus + Neo4j</td><td>阶段 E</td><td>向量检索（课程语义搜索）与图检索（先修课、培养方案关系）</td></tr>
     <tr><td>Vue 3 + Element Plus + ECharts</td><td>阶段 G</td><td>学生端对话助手与治理驾驶舱界面</td></tr>
@@ -611,14 +611,14 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
   <li>2026-09-07：找到 WSL2 的安装方法，<b>Docker 回归</b>，选型恢复起步文档口径；此前的嵌入式方案降级为"单机形态"备选，保留作为论文中的选型对比素材。</li>
 </ol>
 <div class="term"><b>WSL2</b>：Windows 内置的 Linux 子系统，可在其中运行完整的 Linux 环境与 Docker，解决 Windows 上无法直接安装 Docker 的问题。</div>
-<p>当前部署形态：Windows + WSL2 + Docker Compose，共六个容器（MySQL、Redis、应用、网关、Prometheus、Grafana），镜像走国内加速前缀可配置替换。</p>
+<p>当前部署形态：Windows + WSL2 + Docker Compose，共九个容器（MySQL、Redis、RocketMQ NameServer 与 Broker、Canal Server、应用、网关、Prometheus、Grafana），镜像走国内加速前缀可配置替换。</p>
 </section>
 
 <!-- ================= 12 测试与压测 ================= -->
 <section id="testing">
 <h2><span class="no">12</span>测试、压测与路线图</h2>
 
-<h3>12.1 自动化测试（53/53 通过）</h3>
+<h3>12.1 自动化测试（79/79 通过）</h3>
 <p>单元测试用 H2 内存数据库和内存桩替代外部中间件，不依赖本机 MySQL/Redis，任何环境可直接运行：</p>
 <table>
   <thead><tr><th>模块</th><th>数量</th><th>覆盖点（举例）</th></tr></thead>
@@ -685,8 +685,8 @@ WHERE id = ? AND enrolled &lt; capacity</code></pre>
     <tr><td>阶段 A</td><td>Maven 多模块化重构（11 模块）</td><td><span class="badge ok">已完成</span></td></tr>
     <tr><td>阶段 A+</td><td>高可用加固（超时 / 熔断 / 防击穿）、双 Token 认证、日志体系，53 项测试</td><td><span class="badge ok">已完成</span></td></tr>
     <tr><td>阶段 H-1~H-4</td><td>WSL2/Docker 全栈部署、最小网关、JMeter 500 并发阶梯压测与调优</td><td><span class="badge ok">已完成</span></td></tr>
-    <tr><td>阶段 B</td><td>真实 Binlog 同步链（Canal + RocketMQ 容器版，写路径异步化削峰）</td><td><span class="badge plan">下一步</span></td></tr>
-    <tr><td>阶段 C</td><td>巡检引擎 + 补偿 SQL 自愈（hercules-inspector）</td><td><span class="badge plan">规划中</span></td></tr>
+    <tr><td>阶段 B</td><td>真实 Binlog 同步链（Canal 1.1.7 + RocketMQ 4.9.4 容器版，写路径异步化削峰，外部直改库 250ms 同步缓存）</td><td><span class="badge ok">已完成</span></td></tr>
+    <tr><td>阶段 C</td><td>巡检引擎 + 补偿 SQL 自愈（hercules-inspector）</td><td><span class="badge plan">下一步</span></td></tr>
     <tr><td>阶段 D</td><td>Spring AI 多智能体（路由 / 推荐 / 排课冲突 / 执行）</td><td><span class="badge plan">规划中</span></td></tr>
     <tr><td>阶段 E</td><td>RAG（Milvus 向量检索 + Neo4j 图检索）</td><td><span class="badge plan">规划中</span></td></tr>
     <tr><td>阶段 F</td><td>可观测性完善（链路追踪对接、大盘补充）</td><td><span class="badge plan">规划中</span></td></tr>

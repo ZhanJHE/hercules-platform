@@ -10,7 +10,7 @@ import com.zhanjh.hercules.model.CacheVersion;
 import com.zhanjh.hercules.model.Course;
 import com.zhanjh.hercules.sync.clock.VectorClock;
 import com.zhanjh.hercules.sync.model.VersionedValue;
-import com.zhanjh.hercules.sync.producer.VersionChangeProducer;
+import com.zhanjh.hercules.sync.producer.InProcessEventBusProducer;
 import com.zhanjh.hercules.sync.support.VersionReader;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -64,8 +64,12 @@ public class DebugController {
     /** 版本读取器：查询 t_cache_version 中的存量版本（用于响应展示） */
     private final VersionReader versionReader;
 
-    /** 版本变更生产者：发布模拟版本，经进程内事件总线立即被消费 */
-    private final VersionChangeProducer producer;
+    /**
+     * 版本变更生产者：发布模拟版本，经进程内事件总线立即被消费。
+     * 阶段 B 注入具体类型（而非接口）：演示钩子在两种传输模式下都走进程内总线——
+     * canal-mq 模式下业务写路径的同步由 binlog 链路负责，本端点语义不变。
+     */
+    private final InProcessEventBusProducer producer;
 
     /** 缓存门面：提供仅失效 L1 的 evict-local 钩子 */
     private final CacheManager cacheManager;
@@ -80,7 +84,7 @@ public class DebugController {
      */
     public DebugController(CourseMapper courseMapper,
                            VersionReader versionReader,
-                           VersionChangeProducer producer,
+                           InProcessEventBusProducer producer,
                            CacheManager cacheManager) {
         this.courseMapper = courseMapper;
         this.versionReader = versionReader;

@@ -35,14 +35,17 @@ management:
         http.server.requests: true   # HTTP 请求延迟直方图（Prometheus 侧可算 P95/P99，压测可视化用）
 
 # ===== Hercules MVP 配置 =====
-# 延后接入的中间件占位（Sprint 2+）：
-# canal:      Canal 监听 MySQL Binlog（实现 VersionChangeProducer 接口后替换进程内总线）
-# rocketmq:   顺序消息队列（替换 InProcessEventBusProducer）
-# milvus/neo4j: RAG 检索（Sprint 5-6）
+# 延后接入的中间件占位（阶段 C+）：
+# milvus/neo4j: RAG 检索（阶段 E）
 hercules:
   sync:
+    transport: in-process  # 缓存同步触发源：in-process（默认，进程内总线）/ canal-mq（阶段 B：MySQL binlog → canal → RocketMQ → 消费者）
     node-id: node-1        # 本节点标识，用于向量时钟
     max-nodes: 10          # 向量时钟最大节点数（超限告警，对应风险 R-03）
+    rocketmq:              # 仅 canal-mq 模式读取；容器部署经环境变量覆盖 name-server
+      name-server: localhost:9876
+      topic: hercules-binlog-topic
+      consumer-group: hercules-cache-sync
   auth:
     access-ttl: 30m        # Access Token（JWT）有效期
     refresh-ttl: 7d        # Refresh Token（Redis）有效期
