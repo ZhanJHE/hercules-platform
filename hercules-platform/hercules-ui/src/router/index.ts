@@ -39,9 +39,8 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['ADMIN'], area: 'admin' },
     children: [
       { path: '', redirect: '/admin/dashboard' },
-      { path: 'dashboard', name: 'dashboard', component: () => import('@/views/admin/DashboardView.vue'), meta: { roles: ['ADMIN'], title: '治理驾驶舱' } },
+      { path: 'dashboard', name: 'dashboard', component: () => import('@/views/admin/DashboardView.vue'), meta: { roles: ['ADMIN'], title: '系统监控' } },
       { path: 'courses', name: 'admin-courses', component: () => import('@/views/admin/AdminCoursesView.vue'), meta: { roles: ['ADMIN'], title: '课程管理' } },
-      { path: 'demo', name: 'demo', component: () => import('@/views/admin/DemoToolView.vue'), meta: { roles: ['ADMIN'], title: '演示工具' } },
     ],
   },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { public: true, title: '页面不存在' } },

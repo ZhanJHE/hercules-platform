@@ -27,9 +27,8 @@ interface MenuItem {
 const menus = computed<MenuItem[]>(() =>
   auth.isAdmin
     ? [
-        { index: '/admin/dashboard', title: '治理驾驶舱' },
+        { index: '/admin/dashboard', title: '系统监控' },
         { index: '/admin/courses', title: '课程管理' },
-        { index: '/admin/demo', title: '演示工具' },
       ]
     : [
         { index: '/student/courses', title: '课程大厅' },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** 治理驾驶舱（S3）：六宫格指标 + 熔断状态 + 命中率趋势（20s 轮询）。 */
+/** 系统监控（S3）：六个指标格 + 熔断状态 + 命中率趋势（每 20 秒轮询一次）。 */
 import { computed, onMounted, onUnmounted } from 'vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StatCard from '@/components/business/StatCard.vue'
@@ -55,7 +55,7 @@ watch(
 
 <template>
   <div>
-    <PageHeader title="治理驾驶舱" subtitle="缓存一致性治理实时观测（20s 自动刷新）">
+    <PageHeader title="系统监控" subtitle="缓存命中、数据库回源与同步情况（每 20 秒自动刷新）">
       <template #actions>
         <el-button :loading="monitor.loading" @click="monitor.fetchStats()">立即刷新</el-button>
       </template>

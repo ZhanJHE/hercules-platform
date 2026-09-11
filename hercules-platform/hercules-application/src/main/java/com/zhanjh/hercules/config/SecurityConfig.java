@@ -32,7 +32,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <li>白名单（permitAll）：/api/v1/auth/login、/api/v1/auth/refresh、
  *       /actuator/health、/actuator/prometheus（探针与指标拉取）；</li>
  *   <li>STUDENT：/api/v1/enrollment/**（选课/退课/我的选课）；</li>
- *   <li>ADMIN：/api/v1/cache/stats、/api/v1/debug/**（治理驾驶舱与演示工具）、其余 /actuator/**；</li>
+ *   <li>ADMIN：/api/v1/cache/stats、/api/v1/debug/**（系统监控页面与调试接口）、其余 /actuator/**；</li>
  *   <li>认证即可：/api/v1/courses/**（学生与管理员都可查）；</li>
  *   <li>其余请求 denyAll（白名单外默认拒绝）。</li>
  * </ul>

@@ -10,7 +10,6 @@ declare module 'vue' {
   export interface GlobalComponents {
     CourseCard: typeof import('./src/components/business/CourseCard.vue')['default']
     CreditRing: typeof import('./src/components/business/CreditRing.vue')['default']
-    DemoToolPanel: typeof import('./src/components/business/DemoToolPanel.vue')['default']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElContainer: typeof import('element-plus/es')['ElContainer']

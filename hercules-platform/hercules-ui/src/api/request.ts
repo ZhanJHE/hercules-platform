@@ -73,6 +73,13 @@ http.interceptors.response.use(
     }
 
     if (status === 401) {
+      // 登录/刷新接口自身的 401 是凭据错误（用户名或密码错、刷新令牌失效），
+      // 要把服务端文案直接提示出来，不能按「会话过期」静默跳登录——否则用户看不到任何反馈。
+      if (config?.url?.includes('/auth/')) {
+        const msg = (error.response?.data as { message?: string } | undefined)?.message ?? '用户名或密码错误'
+        ElMessage.error(msg)
+        return Promise.reject(new ApiError(401, msg))
+      }
       clearAndGoLogin()
       return Promise.reject(new ApiError(401, '登录已过期，请重新登录'))
     }
