@@ -220,6 +220,7 @@
     <a href="#" data-page="worklog">工作日志</a>
     <a href="#" data-page="baseline">历史基线归档</a>
     <a href="#" data-page="agent">Agent 规范</a>
+    <a href="#" data-page="experience">Agent 经验</a>
   </nav>
 </aside>
 
@@ -267,6 +268,7 @@
       <tr><td><a href="工作日志.md">工作日志.md</a></td><td>哪天做了什么、踩了哪些坑</td></tr>
       <tr><td><a href="历史基线归档.md">历史基线归档.md</a></td><td>开工时写的规划和需求（只读）</td></tr>
       <tr><td><a href="../Agent.md">Agent.md（仓库根目录）</a></td><td>Agent 操作项目必须遵守的规范</td></tr>
+      <tr><td><a href="Agent经验.md">Agent经验.md</a></td><td>本环境/项目里反复出现的坑与避免方法</td></tr>
     </tbody>
   </table>
 </section>
@@ -885,6 +887,28 @@
   </ul>
 
   <p class="doclink">完整内容：<a href="../Agent.md">Agent.md（仓库根目录）</a></p>
+</section>
+
+<!-- ================= Agent 经验 ================= -->
+<section class="page" id="page-experience">
+  <header>
+    <h1>Agent 经验</h1>
+    <p class="lede">本环境/项目里会反复出现的问题、原因和避免方法。给所有 Agent 看：遇到问题先查这里。它不是规范，规范是根目录 <a href="../Agent.md">Agent.md</a>。</p>
+  </header>
+
+  <h3>最容易踩的几类</h3>
+  <ul>
+    <li><b>编码</b>：Windows 默认 GBK，批处理内嵌中文会错位（壳保持纯 ASCII）；往容器/数据库传中文用 SQL 文件 + <code>--default-character-set=utf8mb4</code>。</li>
+    <li><b>脚本执行</b>：PowerShell 默认禁止运行 .ps1，用 <code>-ExecutionPolicy Bypass</code>；<code>.bat</code> 必须 CRLF 行尾。</li>
+    <li><b>沙箱</b>：管道捕获子进程输出失败（CreatePipe/EPERM），不要 <code>git log | Select-String</code>；surefire 分叉用 <code>-DforkCount=0</code>；git-filter-repo 需要宽权限。</li>
+    <li><b>gitignore 两个坑</b>：对已跟踪文件无效（先 <code>git rm --cached</code>）；含分隔符的模式锚定在 .gitignore 所在目录（用 <code>**/</code>）。</li>
+    <li><b>敏感信息</b>：一旦进公开仓库历史必须重写历史清除（filter-repo 会移除 origin，重写后重加并强推）；最好源头避免，密钥走忽略文件。</li>
+    <li><b>构建测试</b>：MyBatis-Plus 分页插件拆分需补依赖；SSE × Security 限定 <code>dispatcher-types</code>；Hikari 池大小要压测验证；压测数据要有门禁。</li>
+    <li><b>部署</b>：Docker Hub 阻断换镜像源；容器内 <code>npm ci</code> 超时改宿主预构建；canal <code>partitionsNum</code> 显式配置；JVM 显式调优；打包前结束残留 java 进程。</li>
+    <li><b>智能体</b>：GLM token 预算与超时留足（4096 / 90s）；先修课按 ID 比对；会话绑定用户防越权；LLM 故障 1s 降级。</li>
+  </ul>
+
+  <p class="doclink">完整内容：<a href="Agent经验.md">Agent经验.md</a></p>
 </section>
 
 <footer>
