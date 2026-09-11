@@ -34,6 +34,9 @@ public class HerculesCacheProperties {
     /** 本地缓存最大条目数（Caffeine maximumSize，超出按 W-TinyLFU 淘汰）；默认 1000，对应配置项 hercules.cache.local-max-size。 */
     private long localMaxSize = 1000;
 
+    /** 逐键 TTL 覆盖表容量上限（CaffeineLocalCacheManager 的内存保护阈值，超出先回收死键）；默认 4096，对应配置项 hercules.cache.ttl-override-cap。 */
+    private int ttlOverrideCap = 4096;
+
     /** 列表键前缀（FixedTTLStrategy 以此识别列表键并套用 list-ttl）；默认 "course:list:"，对应配置项 hercules.cache.list-key-prefix。 */
     private String listKeyPrefix = "course:list:";
 
@@ -107,6 +110,24 @@ public class HerculesCacheProperties {
      */
     public void setLocalMaxSize(long localMaxSize) {
         this.localMaxSize = localMaxSize;
+    }
+
+    /**
+     * 读取逐键 TTL 覆盖表容量上限。
+     *
+     * @return 当前值（hercules.cache.ttl-override-cap），默认 4096
+     */
+    public int getTtlOverrideCap() {
+        return ttlOverrideCap;
+    }
+
+    /**
+     * 设置逐键 TTL 覆盖表容量上限（Spring 绑定入口）。
+     *
+     * @param ttlOverrideCap 覆盖表条目上限，须 >= 1
+     */
+    public void setTtlOverrideCap(int ttlOverrideCap) {
+        this.ttlOverrideCap = ttlOverrideCap;
     }
 
     /**

@@ -23,6 +23,9 @@ public class AgentProperties {
     /** 每会话内存历史上限（轮数，超出淘汰最旧，hercules.agent.history-limit）。 */
     private int historyLimit = 20;
 
+    /** 内存会话数上限（达到上限时淘汰最旧会话，hercules.agent.max-sessions）。 */
+    private int maxSessions = 500;
+
     /** 模型名（hercules.agent.model）：与 spring.ai.openai.chat.options.model 保持一致，用于 trace 记录与文档口径。 */
     private String model = "glm-4.5-air";
 
@@ -86,6 +89,28 @@ public class AgentProperties {
             throw new IllegalArgumentException("hercules.agent.history-limit 必须 >= 0，实际值: " + historyLimit);
         }
         this.historyLimit = historyLimit;
+    }
+
+    /**
+     * 读取内存会话数上限。
+     *
+     * @return 会话数上限
+     */
+    public int getMaxSessions() {
+        return maxSessions;
+    }
+
+    /**
+     * 覆盖内存会话数上限。
+     *
+     * @param maxSessions 会话数上限，必须 >= 1（否则新会话登记后立即被淘汰）
+     * @throws IllegalArgumentException 小于 1 时抛出
+     */
+    public void setMaxSessions(int maxSessions) {
+        if (maxSessions < 1) {
+            throw new IllegalArgumentException("hercules.agent.max-sessions 必须 >= 1，实际值: " + maxSessions);
+        }
+        this.maxSessions = maxSessions;
     }
 
     /**

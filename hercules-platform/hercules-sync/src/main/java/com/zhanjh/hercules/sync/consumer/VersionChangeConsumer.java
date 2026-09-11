@@ -149,6 +149,10 @@ public class VersionChangeConsumer {
      */
     private void resolveConflict(VersionedValue incoming, CacheVersion stored, VectorClock storedClock) {
         String oldJson = remote.get(incoming.key()); // 旧值取自 L2；L2 已被逐出时为 null，合并退化为整体采用新值
+        if (oldJson == null) {
+            // 退化路径留痕：全量对象写入场景下「整体取新值」语义等价，故用 debug 而非 warn
+            log.debug("[hercules-sync] conflict merge degraded (L2 miss) for key={}", incoming.key());
+        }
         // LWW 裁决时间戳：以版本记录 update_time 近似旧值的应用时刻；缺失按 0 让新值必胜
         long oldTs = stored == null || stored.getUpdateTime() == null
                 ? 0L

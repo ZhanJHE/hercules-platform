@@ -137,9 +137,10 @@ public class CacheStatsCollector {
      * 将计数器注册为 Micrometer FunctionCounter 指标（存在 MeterRegistry 时由 CacheConfig 调用一次）。
      *
      * <p>实现要点：FunctionCounter.builder(指标名, AtomicLong, AtomicLong::get) 为拉取式注册，
-     * 采集时读取当前值，计数本身不经过 Micrometer。注册 7 个指标：
+     * 采集时读取当前值，计数本身不经过 Micrometer。注册 8 个指标：
      * hercules.cache.l1.hit、hercules.cache.l1.miss、hercules.cache.l2.hit、hercules.cache.l2.miss、
-     * hercules.cache.db.load、hercules.sync.version.applied、hercules.sync.conflict.detected。
+     * hercules.cache.db.load、hercules.sync.version.applied、hercules.sync.conflict.detected、
+     * hercules.cache.redis.degraded。
      *
      * @param registry Micrometer 注册表（如 PrometheusMeterRegistry），不允许为 null；
      *                 无注册表场景（单测）不调用本方法，计数功能不受影响

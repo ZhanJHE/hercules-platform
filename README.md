@@ -19,7 +19,7 @@ Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层
 - **L3 多智能体决策层**：路由 / 推荐 / 排课冲突 / 执行四类智能体协作（规划中）；
 - **L4 用户接入层**：Spring Cloud Gateway + Vue3 双端界面（规划中）。
 
-当前已完成**分布式缓存一致性治理核心**的可运行实现：课程查询走多级缓存、数据变更后由同步链刷新缓存、并发写冲突走字段级 LWW 合并，全链路可观测、可演示，后端 96 个 + 前端 15 个自动化测试全覆盖；并已完成双 Token 认证、独立网关、WSL2/Docker 全栈部署（十容器）、500 并发压测（5,027 req/s，错误率 0.0007%）、**真实 Binlog 同步链**（Canal 1.1.7 + RocketMQ 4.9.4，外部直改数据库 250ms 内同步缓存）、**多智能体对话入口**（Spring AI 1.0.6 + 智谱 GLM glm-4.5-air），以及 **Vue3 双端前端**（Element Plus + Pinia + SSE 流式对话 + 治理驾驶舱，http://localhost:8090）。
+当前已完成**分布式缓存一致性治理核心**的可运行实现：课程查询走多级缓存、数据变更后由同步链刷新缓存、并发写冲突走字段级 LWW 合并，全链路可观测、可演示，后端 108 个 + 前端 17 个自动化测试全覆盖；并已完成双 Token 认证、独立网关、WSL2/Docker 全栈部署（十容器）、500 并发压测（5,027 req/s，错误率 0.0007%）、**真实 Binlog 同步链**（Canal 1.1.7 + RocketMQ 4.9.4，外部直改数据库 250ms 内同步缓存）、**多智能体对话入口**（Spring AI 1.0.6 + 智谱 GLM glm-4.5-air），以及 **Vue3 双端前端**（Element Plus + Pinia + SSE 流式对话 + 治理驾驶舱，http://localhost:8090）。
 
 ## ✨ 核心特性
 
@@ -103,10 +103,13 @@ start.bat
 
 ```powershell
 cd hercules-platform
-.\mvnw.cmd test                    # 全量测试（H2 + 内存桩，不依赖本机中间件）
+.\mvnw.cmd test                    # 全量测试（H2 + 内存桩，不依赖本机中间件，应 108/108 通过）
 .\mvnw.cmd package -DskipTests     # 打包
 java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
 ```
+
+> `mvnw.cmd` 依赖 PATH 中的 Windows PowerShell（Maven Wrapper 固有行为）。若环境中 `powershell`
+> 不可解析，改用本机 Maven：`mvn -f pom.xml test`，或 `.m2\wrapper\dists` 下 wrapper 已下载的发行版。
 
 启动成功判据：`GET http://127.0.0.1:8080/actuator/health` 返回 `UP`。
 
@@ -122,6 +125,8 @@ java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
 | POST | `/api/v1/enrollment` | 选课（STUDENT；courseId 传参，studentId 取自 token） |
 | DELETE | `/api/v1/enrollment?courseId=` | 退课（STUDENT） |
 | GET | `/api/v1/enrollment/mine` | 我的选课记录 |
+| POST | `/api/v1/chat` | 自然语言对话（SSE 流式 token/meta 事件，需登录；会话归属绑定当前用户） |
+| GET | `/api/v1/chat/history/{sessionId}` | 会话历史（仅会话属主可读，他人 403） |
 | GET | `/api/v1/cache/stats` | 命中率 / 各级命中 / 同步与冲突计数（ADMIN） |
 | POST | `/api/v1/debug/simulate-conflict` | 模拟双节点并发写冲突（ADMIN） |
 | POST | `/api/v1/debug/evict-local?key=` | 手动失效 L1（ADMIN） |

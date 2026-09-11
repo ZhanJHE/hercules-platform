@@ -80,4 +80,38 @@ class CaffeineLocalCacheManagerTest {
         assertThat(local.get("course:list:1:10:-")).isNull();
         assertThat(local.estimatedSize()).isZero();
     }
+
+    /**
+     * 验证点（覆盖表溢出）：达到容量上限时先回收死键、而非整体清空——
+     * 仍活跃的覆盖项必须保留其 TTL，否则列表键会从短 TTL 退回默认长 TTL，
+     * 破坏「列表 10s 最终一致窗口」。
+     *
+     * <p>构造手法：把默认 TTL 设为 100ms、覆盖项设为 5000ms，使「覆盖项是否存活」在
+     * 300ms 内即可观测——覆盖项保留 → 键存活；覆盖表被整体清空 → 退回 100ms 默认 → 键消失。
+     * 故本用例可区分「回收死键」与「整体清空」两种实现。
+     */
+    @Test
+    void overrideTableReclaimsDeadKeysInsteadOfClearingAll() throws InterruptedException {
+        HerculesCacheProperties props = new HerculesCacheProperties();
+        props.setLocalTtl(Duration.ofMillis(100));
+        props.setTtlOverrideCap(3);
+        CaffeineLocalCacheManager manager = new CaffeineLocalCacheManager(props);
+
+        // 死键：条目 50ms 后过期，但覆盖登记残留（覆盖表不会随条目过期自动清理）
+        manager.put("k-dead", "v", Duration.ofMillis(50));
+        Thread.sleep(200);
+
+        // 活跃覆盖项 + 一个填充项，把覆盖表推到上限
+        manager.put("k-alive", "v", Duration.ofMillis(5000));
+        manager.put("k-fill", "v", Duration.ofMillis(5000));
+        // 本次写入触发回收：死键被移除、活跃项保留
+        manager.put("k-trigger", "v", Duration.ofMillis(5000));
+
+        Thread.sleep(300);
+
+        // 活跃覆盖项仍在（覆盖表未被整体清空），死键已消失
+        assertThat(manager.get("k-alive")).isEqualTo("v");
+        assertThat(manager.get("k-fill")).isEqualTo("v");
+        assertThat(manager.get("k-dead")).isNull();
+    }
 }

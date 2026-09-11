@@ -15,13 +15,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * 不同（如列表键的 10s 最终一致窗口）则登记到 ttlOverrides 覆盖表，过期计算按覆盖值；
  * 未覆盖的键按 hercules.cache.local-ttl（默认 60s）过期；容量上限
  * maximumSize = hercules.cache.local-max-size（默认 1000，超出按 W-TinyLFU 淘汰）。
- * expireAfterRead 返回 Long.MAX_VALUE：只在写入时计时、读访问不续期（cache-aside 语义）。
+ * expireAfterRead 返回剩余时长原值（currentDuration）：只在写入时计时、读访问不续期（cache-aside 语义）。
  * recordStats 开启的 Caffeine 内置统计当前无消费方，运行时命中率以门面层 CacheStatsCollector 为准。
  *
  * <p>线程安全性：Caffeine Cache 与 ttlOverrides（ConcurrentHashMap）均线程安全，可并发调用。
  *
- * <p>内存取舍：ttlOverrides 的键不会随条目过期自动清理，put 时超过容量上限（4096）即整体清空，
- * 由后续写入重建——覆盖项最多延迟一个写入周期恢复正常 TTL（防止长尾关键词键撑大覆盖表）。
+ * <p>内存取舍：ttlOverrides 的键不会随条目过期自动清理。put 时覆盖表达到容量上限
+ * （hercules.cache.ttl-override-cap，默认 4096）则**先回收死键**——对应条目已过期或被容量淘汰的
+ * 覆盖项——仍超限才整体清空重建。剪枝优先保证仍活跃的覆盖项（如列表键的 10s）不被误清；
+ * 仅极端兜底清空时，活跃列表键会短暂退回默认 TTL（60s），并随下一次写入重新登记。
  *
  * <p>扩展点：AdaptiveTTLStrategy / 容量自适应淘汰留待后续冲刺扩展。
  *
@@ -30,8 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CaffeineLocalCacheManager implements LocalCacheManager {
 
-    /** 逐键 TTL 覆盖表的容量上限：超过即整体清空重建，防止长尾键导致覆盖表无限增长。 */
-    private static final int TTL_OVERRIDE_CAP = 4096;
+    /** 逐键 TTL 覆盖表容量上限（hercules.cache.ttl-override-cap）：达到上限先回收死键，仍超限才整体清空。 */
+    private final int ttlOverrideCap;
 
     /** 底层 Caffeine 缓存：key/value 均为 String（value 为 JSON），过期策略为逐键 Expiry。 */
     private final Cache<String, String> cache;
@@ -45,10 +47,12 @@ public class CaffeineLocalCacheManager implements LocalCacheManager {
     /**
      * 按配置构建 Caffeine 缓存：自定义 Expiry 实现逐键过期 + 容量上限 + 统计开关一次成型。
      *
-     * @param props 缓存配置（hercules.cache.*）：localTtl 决定默认过期、localMaxSize 决定容量上限
+     * @param props 缓存配置（hercules.cache.*）：localTtl 决定默认过期、localMaxSize 决定容量上限、
+     *              ttlOverrideCap 决定覆盖表容量阈值
      */
     public CaffeineLocalCacheManager(HerculesCacheProperties props) {
         this.defaultTtl = props.getLocalTtl();
+        this.ttlOverrideCap = props.getTtlOverrideCap();
         this.cache = Caffeine.newBuilder()
                 .expireAfter(new Expiry<String, String>() {
                     @Override
@@ -100,6 +104,8 @@ public class CaffeineLocalCacheManager implements LocalCacheManager {
      * 使 Expiry 按覆盖值计算过期；与全局默认相同或非法（null/非正）的 ttl 不登记，
      * 避免覆盖表无谓增长。覆盖登记必须先于 cache.put，保证 Expiry 回调能读到该键的 TTL。
      *
+     * <p>覆盖表达到上限时的回收策略见类注释「内存取舍」：先剪除死键、仍超限才整体清空。
+     *
      * @param key   缓存键，不允许为 null
      * @param value JSON 字符串形式的缓存值，不允许为 null
      * @param ttl   该键的期望过期时长；null/非正表示使用全局默认
@@ -109,9 +115,14 @@ public class CaffeineLocalCacheManager implements LocalCacheManager {
         if (ttl == null || ttl.isZero() || ttl.isNegative() || ttl.equals(defaultTtl)) {
             ttlOverrides.remove(key);
         } else {
-            if (ttlOverrides.size() >= TTL_OVERRIDE_CAP) {
-                // 超上限整体清空重建：覆盖项在下次写入时重新登记（内存保护，见类注释「内存取舍」）
-                ttlOverrides.clear();
+            if (ttlOverrides.size() >= ttlOverrideCap) {
+                // 先回收死键（对应条目已过期或被容量淘汰），避免整体清空误伤仍活跃的覆盖项
+                // ——否则列表键会从 10s 最终一致窗口退回 60s 默认 TTL
+                ttlOverrides.keySet().removeIf(k -> cache.getIfPresent(k) == null);
+                if (ttlOverrides.size() >= ttlOverrideCap) {
+                    // 仍超限才整体清空重建（极端兜底：活跃覆盖项在下次写入时重新登记）
+                    ttlOverrides.clear();
+                }
             }
             ttlOverrides.put(key, ttl);
         }

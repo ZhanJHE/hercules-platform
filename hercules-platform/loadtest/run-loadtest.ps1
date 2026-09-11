@@ -10,6 +10,8 @@
 #   2. 全部参数经 -q 属性文件传入，java 命令行不携带任何 -J（规避 CLI 解析坑）；
 #   3. 线程组规模表达读7:写3（读 = floor(Threads*0.7)，其余为写）；
 #   4. 看门狗超时（rampup+duration+180s）强制终止 JMeter，JTL 已落盘可用 -g 重生成报告。
+#   5. 跑完解析 statistics.json 做成败门禁（错误率 / 读端点 P95），不达标 exit 1——
+#      否则 JMeter CLI 无论失败多少都返回 0，压测结论只能靠人眼看。
 # 前置：Docker 栈已启动（网关 8081）；JMeter 运行时已在 jmeter-runtime（缺失时先跑 mvnw configure）
 
 param(
@@ -17,7 +19,13 @@ param(
     [int]$Rampup = 30,
     [int]$Duration = 300,
     [string]$Hostname = "127.0.0.1",
-    [string]$Port = "8081"
+    [string]$Port = "8081",
+    # 读路径门禁阈值：错误率 0.1% + P95 800ms
+    #   依据：最近一轮报告读端点 p99 为 472ms 且错误率为 0，阈值留有余量。
+    #   只对读端点设门禁——写端点在单账号下重复选课会按预期返回 409
+    #   （t_enrollment.uk_student_course 生效后），那是正确行为而非故障，故不纳入判定。
+    [double]$MaxReadErrorPct = 0.1,
+    [int]$MaxReadP95Ms = 800
 )
 
 $ErrorActionPreference = "Stop"
@@ -106,3 +114,45 @@ Remove-Item $propsFile -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Host "==> 完成。HTML 报告：reports\$stamp\index.html"
 Write-Host "==> 结果数据：results\$stamp.jtl"
+
+# 7) 成败门禁：解析 JMeter dashboard 的 statistics.json，只对读端点判定
+#    （pct2ResTime = 95th 百分位；pct1/pct2/pct3 依次为 90/95/99）
+#    写端点不设门禁：单账号重复选课按预期返回 409（uk_student_course 生效后的正确行为）。
+$statsFile = Join-Path $reportDir "statistics.json"
+if (-not (Test-Path $statsFile)) {
+    Write-Host "[警告] 未找到 statistics.json，跳过门禁判定"
+    exit 0
+}
+$stats = Get-Content $statsFile -Raw | ConvertFrom-Json
+
+Write-Host ""
+Write-Host "==> 压测结果摘要"
+$gateFailures = @()
+foreach ($name in @('read-list', 'read-detail')) {
+    $s = $stats.$name
+    if ($null -eq $s) { continue }
+    $errPct = [double]$s.errorPct
+    $p95 = [int]$s.pct2ResTime
+    Write-Host ("    {0,-12} 样本={1,-9} 错误率={2}%  P95={3}ms  (阈值 {4}% / {5}ms)" -f `
+        $name, $s.sampleCount, $errPct, $p95, $MaxReadErrorPct, $MaxReadP95Ms)
+    if ($errPct -gt $MaxReadErrorPct) {
+        $gateFailures += "$name 错误率 $errPct% 超过阈值 $MaxReadErrorPct%"
+    }
+    if ($p95 -gt $MaxReadP95Ms) {
+        $gateFailures += "$name P95 ${p95}ms 超过阈值 ${MaxReadP95Ms}ms"
+    }
+}
+$write = $stats.'write-enroll'
+if ($null -ne $write) {
+    Write-Host ("    {0,-12} 样本={1,-9} 错误率={2}%  （含预期 409，不计入门禁）" -f `
+        'write-enroll', $write.sampleCount, $write.errorPct)
+}
+Write-Host ("    总体         样本={0,-9} 错误率={1}% 吞吐={2}/s" -f `
+    $stats.Total.sampleCount, $stats.Total.errorPct, [math]::Round([double]$stats.Total.throughput, 1))
+
+if ($gateFailures.Count -gt 0) {
+    foreach ($f in $gateFailures) { Write-Host "[失败] $f" }
+    Write-Host "==> 压测门禁未通过（阈值可用 -MaxReadErrorPct / -MaxReadP95Ms 覆盖）"
+    exit 1
+}
+Write-Host "==> 压测门禁通过（读端点错误率与 P95 均达标）"

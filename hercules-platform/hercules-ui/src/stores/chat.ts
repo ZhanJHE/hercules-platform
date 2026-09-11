@@ -48,6 +48,15 @@ export const useChatStore = defineStore('chat', {
           this.sending = false
           this.controller = null
         },
+        onSessionInvalid: () => {
+          // 服务端判定会话归属他人：重建会话（换 sessionId + 清空消息）后提示用户重发
+          this.reset()
+          this.messages.push({
+            role: 'assistant',
+            content: '会话已失效，请重新发送。',
+            error: true,
+          })
+        },
       }
       try {
         await streamChat(this.sessionId, message, handlers, this.controller.signal)
@@ -66,11 +75,13 @@ export const useChatStore = defineStore('chat', {
     stop(): void {
       this.controller?.abort()
     },
-    /** 重置会话（新会话 ID + 清空消息）。 */
+    /** 重置会话（新会话 ID + 清空消息）；进行中的生成一并终止并复位状态机。 */
     reset(): void {
       if (this.sending) {
         this.stop()
       }
+      this.sending = false
+      this.controller = null
       this.sessionId = crypto.randomUUID()
       this.messages = []
     },

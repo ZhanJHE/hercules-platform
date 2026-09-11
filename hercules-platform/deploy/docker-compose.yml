@@ -112,13 +112,23 @@ services:
       context: ..
       dockerfile: Dockerfile-ui
       args:
-        BASE_IMAGE: ${DOCKER_MIRROR:-docker.m.daocloud.io}/library/node:22-alpine
+        # 单阶段 nginx 镜像（宿主预构建 dist）：BASE_IMAGE 必须是 nginx 基础镜像。
+        # 早期多阶段版本传的是 node，与 Dockerfile 的 /library/nginx:1.27-alpine 拼接出非法
+        # 引用（…/library/node:22-alpine/library/nginx:1.27-alpine）导致干净构建必失败。
+        BASE_IMAGE: ${DOCKER_MIRROR:-docker.m.daocloud.io}/library/nginx:1.27-alpine
     container_name: hercules-ui
     depends_on:
       gateway:
         condition: service_healthy
     ports:
       - "8090:80"                   # 浏览器入口 http://localhost:8090
+    healthcheck:
+      # nginx:alpine 无 curl，用 busybox wget 探测静态入口
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   prometheus:
     image: ${DOCKER_MIRROR:-docker.m.daocloud.io}/prom/prometheus:latest

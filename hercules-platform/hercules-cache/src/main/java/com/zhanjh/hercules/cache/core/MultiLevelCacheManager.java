@@ -34,7 +34,8 @@ import java.util.function.Supplier;
  * （避免同一请求重复计入），命中率分母保持「进入读路径的请求数」。
  *
  * <p>写/失效路径与 hercules.sync 向量时钟同步链配合：put 先写 L2 再写 L1；
- * invalidate 先删 L2 再删本节点 L1（跨节点 L1 失效由同步链广播）；invalidateLocal 只删本节点 L1。
+ * invalidate 先删 L2 再删本节点 L1（跨节点 L1 失效依赖同步链：canal-mq 传输下逐节点失效，
+ * in-process 传输的事件不出本 JVM）；invalidateLocal 只删本节点 L1。
  * L2 经熔断装饰器保护：故障期间 put/delete 降级跳过、get 快速返回 null，
  * 本类通过 {@link DistributedCacheManager#isAvailable()} 感知并跳过 L2 相关等待。
  *
@@ -234,7 +235,8 @@ public class MultiLevelCacheManager implements CacheManager {
 
     /**
      * 失效实现：先删 L2 再删本节点 L1，并输出 debug 日志留痕；
-     * 跨节点 L1 失效由 hercules.sync 同步链消费端广播，本方法不负责。
+     * 跨节点 L1 失效由 hercules.sync 同步链消费端广播（canal-mq 传输下跨节点生效；
+     * in-process 传输的事件不出本 JVM），本方法不负责。
      * L2 经熔断装饰器：故障期间删除降级跳过（残留旧值存活上界 = 剩余 TTL，见装饰器说明）。
      *
      * @param key 待失效的缓存键，不允许为 null

@@ -11,6 +11,7 @@ import { defineStore } from 'pinia'
 import * as authApi from '@/api/auth'
 import { clearTokens, getAccessToken, getProfile, setProfile, setTokens } from '@/api/tokenBox'
 import { jwtDecode } from '@/utils/jwtDecode'
+import { useChatStore } from './chat'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -51,6 +52,8 @@ export const useAuthStore = defineStore('auth', {
       clearTokens()
       this.username = ''
       this.role = ''
+      // 会话归属随用户走：重置对话会话，避免换账号后沿用上一用户的 sessionId（服务端会返回 403）
+      useChatStore().reset()
     },
   },
 })

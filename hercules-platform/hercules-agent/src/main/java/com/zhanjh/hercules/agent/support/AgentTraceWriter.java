@@ -38,7 +38,7 @@ public class AgentTraceWriter {
     }
 
     /**
-     * 写一条智能体调用记录。
+     * 写一条智能体调用记录（无 LLM 调用的纯规则智能体：耗时记 0）。
      *
      * @param ctx       对话上下文（traceId/sessionId 来源）
      * @param agentType 智能体类型
@@ -47,6 +47,21 @@ public class AgentTraceWriter {
      * @param success   是否成功
      */
     public void write(AgentContext ctx, AgentType agentType, String input, String output, boolean success) {
+        write(ctx, agentType, input, output, success, 0L);
+    }
+
+    /**
+     * 写一条智能体调用记录（含 LLM 调用耗时）。
+     *
+     * @param ctx          对话上下文（traceId/sessionId 来源）
+     * @param agentType    智能体类型
+     * @param input        输入（用户消息或上游摘要）
+     * @param output       输出（文本/摘要）
+     * @param success      是否成功
+     * @param llmLatencyMs LLM 调用耗时（毫秒）；纯规则智能体（SCHEDULING/EXECUTION）传 0
+     */
+    public void write(AgentContext ctx, AgentType agentType, String input, String output, boolean success,
+                      long llmLatencyMs) {
         try {
             AgentTrace trace = new AgentTrace();
             trace.setTraceId(ctx.traceId());
@@ -55,7 +70,8 @@ public class AgentTraceWriter {
             trace.setInputPrompt(truncate(input, 512));
             trace.setOutputContent(truncate(output, 2048));
             trace.setLlmModel(props.getModel());
-            trace.setLlmLatencyMs(0);
+            // AgentTrace.llmLatencyMs 为 Integer：毫秒级耗时远小于上限，仍做钳制以防溢出
+            trace.setLlmLatencyMs(llmLatencyMs > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) llmLatencyMs);
             trace.setStatus(success ? 0 : 1);
             trace.setCreateTime(LocalDateTime.now());
             traceMapper.insert(trace);

@@ -4,6 +4,7 @@ import com.zhanjh.hercules.agent.config.AgentProperties;
 import com.zhanjh.hercules.agent.orchestrator.AgentOrchestrator;
 import com.zhanjh.hercules.agent.orchestrator.ConversationHistory;
 import com.zhanjh.hercules.auth.JwtUtil;
+import com.zhanjh.hercules.common.BusinessException;
 import com.zhanjh.hercules.common.JsonUtil;
 import com.zhanjh.hercules.common.R;
 import com.zhanjh.hercules.model.agent.AgentContext;
@@ -37,7 +38,9 @@ import java.util.List;
  * （不会以 error 信号到达控制器），error 事件仅作最后兜底。
  *
  * <p>认证与越权：端点要求登录；studentId 一律取自 JWT 主体（与选课接口同源），
- * 前端传入的任何身份信息不参与执行语义。
+ * 前端传入的任何身份信息不参与执行语义。会话维度：sessionId 首次被使用时绑定当前用户，
+ * 此后仅属主可读写（他人访问返回 403）——避免猜到 sessionId 即可读取他人对话记录，
+ * 或劫持他人（同一 sessionId 下）的待确认选课请求。
  *
  * <p>线程安全性：无实例可变状态；SSE 回调运行在 reactor 线程，emitter 线程安全。
  *
@@ -91,6 +94,10 @@ public class ChatController {
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chat(@RequestBody @Valid ChatRequest request,
                            @AuthenticationPrincipal JwtUtil.AuthClaims principal) {
+        // 会话归属校验先于一切分支：agent 关闭时的降级路径同样不可跨用户访问
+        if (!history.claim(request.sessionId(), principal == null ? null : principal.userId())) {
+            throw new BusinessException(403, "无权访问该会话");
+        }
         SseEmitter emitter = new SseEmitter(120_000L);
         if (!agentProps.isEnabled()) {
             return completeWithText(emitter, "对话功能暂未开启。可直接使用课程查询与选课接口。", null);
@@ -137,11 +144,19 @@ public class ChatController {
     /**
      * 会话历史（内存态，应用重启清空——已知边界）。
      *
+     * <p>越权收敛：仅会话属主可读，归属他人返回 403；isOwnedBy 不登记新会话，
+     * 故以随机 sessionId 探测无副作用（未知会话返回空列表）。
+     *
      * @param sessionId 会话标识
+     * @param principal JWT 认证主体（JwtAuthenticationFilter 写入 SecurityContext）
      * @return 发言列表（时间正序）
      */
     @GetMapping("/history/{sessionId}")
-    public R<List<ChatTurn>> history(@PathVariable String sessionId) {
+    public R<List<ChatTurn>> history(@PathVariable String sessionId,
+                                     @AuthenticationPrincipal JwtUtil.AuthClaims principal) {
+        if (!history.isOwnedBy(sessionId, principal == null ? null : principal.userId())) {
+            throw new BusinessException(403, "无权访问该会话");
+        }
         return R.ok(history.getHistory(sessionId));
     }
 

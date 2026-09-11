@@ -204,27 +204,35 @@ public class AgentOrchestrator {
      * @return token 流（永不 error、永不为空）
      */
     private Flux<String> llmStreamWithFallback(AgentContext ctx, RecommendationAgent.Prepared prepared) {
-        java.util.concurrent.atomic.AtomicBoolean received = new java.util.concurrent.atomic.AtomicBoolean(false);
-        return llm.stream(prepared.systemPrompt(), prepared.userPrompt())
-                .doOnNext(token -> {
-                    if (!received.get() && !token.isBlank()) {
+        // Flux.defer：本方法返回冷流，计时必须从「订阅时刻」起算（起点在 defer 内取）；
+        // received 同样在 defer 内创建，保证多次订阅各自独立
+        return Flux.defer(() -> {
+            long startNanos = System.nanoTime();
+            java.util.concurrent.atomic.AtomicBoolean received =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+            return llm.stream(prepared.systemPrompt(), prepared.userPrompt())
+                    .doOnNext(token -> {
+                        if (!received.get() && !token.isBlank()) {
+                            received.set(true);
+                        }
+                    })
+                    .onErrorResume(e -> {
+                        log.warn("[hercules-agent] llm stream failed, fallback to plain list: {}", e.getMessage());
+                        // 标记已发内容：避免下方 concat 空正文兜底重复追加
                         received.set(true);
-                    }
-                })
-                .onErrorResume(e -> {
-                    log.warn("[hercules-agent] llm stream failed, fallback to plain list: {}", e.getMessage());
-                    // 标记已发内容：避免下方 concat 空正文兜底重复追加
-                    received.set(true);
-                    return Flux.just(prepared.fallbackText());
-                })
-                // 空正文兜底：GLM thinking 吃满 token 时 content 为空（流正常完成但无 token）
-                .concatWith(Flux.defer(() -> received.get()
-                        ? Flux.empty()
-                        : Flux.just(prepared.fallbackText())))
-                .doOnComplete(() -> traceWriter.write(ctx, AgentType.RECOMMENDATION,
-                        ctx.message(), received.get()
-                                ? "(流式推荐，候选 " + prepared.recommendations().size() + " 条)"
-                                : "(LLM 空响应，降级候选列表 " + prepared.recommendations().size() + " 条)", true));
+                        return Flux.just(prepared.fallbackText());
+                    })
+                    // 空正文兜底：GLM thinking 吃满 token 时 content 为空（流正常完成但无 token）
+                    .concatWith(Flux.defer(() -> received.get()
+                            ? Flux.empty()
+                            : Flux.just(prepared.fallbackText())))
+                    // 落 trace 时带上真实 LLM 耗时（含 thinking 首包延迟），供论文/排障取证
+                    .doOnComplete(() -> traceWriter.write(ctx, AgentType.RECOMMENDATION,
+                            ctx.message(), received.get()
+                                    ? "(流式推荐，候选 " + prepared.recommendations().size() + " 条)"
+                                    : "(LLM 空响应，降级候选列表 " + prepared.recommendations().size() + " 条)",
+                            true, (System.nanoTime() - startNanos) / 1_000_000L));
+        });
     }
 
     /**

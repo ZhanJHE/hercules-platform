@@ -27,6 +27,19 @@ public class StubLlmPort implements LlmPort {
     /** 已消耗的响应计数（观测用）。 */
     private final AtomicInteger consumed = new AtomicInteger();
 
+    /** 流式首包延迟（毫秒，默认 0）：供测试验证 LLM 耗时计量（t_agent_trace.llm_latency_ms）。 */
+    private volatile long streamDelayMillis;
+
+    /**
+     * 设置流式首包延迟（毫秒）：只在流的开头延迟，后续分片仍同步发射，
+     * 避免调度器重排引入测试不确定性。
+     *
+     * @param millis 延迟毫秒数，负值按 0 处理
+     */
+    public void setStreamDelayMillis(long millis) {
+        this.streamDelayMillis = Math.max(0L, millis);
+    }
+
     /**
      * 入队预设响应（可变参数按序回放）。
      *
@@ -61,7 +74,10 @@ public class StubLlmPort implements LlmPort {
         for (int i = 0; i < response.length(); i += 8) {
             slices.add(response.substring(i, Math.min(response.length(), i + 8)));
         }
-        return Flux.fromIterable(slices);
+        Flux<String> flux = Flux.fromIterable(slices);
+        return streamDelayMillis > 0
+                ? flux.delaySubscription(java.time.Duration.ofMillis(streamDelayMillis))
+                : flux;
     }
 
     /**

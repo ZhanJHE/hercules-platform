@@ -69,6 +69,7 @@ hercules:
     model: glm-4.5-air   # 对话/推荐/意图兜底使用的模型（与 spring.ai.openai 同源）
     enabled: true        # 总开关（false 时 chat 端点返回固定降级提示）
     history-limit: 20    # 内存会话历史上限（轮）
+    max-sessions: 500    # 内存会话数上限，达到上限淘汰最旧会话（历史/待确认/归属一并清除）
     # LLM 超时：glm-4.5-air 为思考型模型，首包 18~32s 波动（实测），过短会误杀正常生成
     timeout-seconds: 90
   auth:
@@ -84,6 +85,7 @@ hercules:
     remote-ttl: 300s       # Redis L2 详情键 TTL
     list-ttl: 10s          # 列表键 TTL（最终一致窗口）
     local-max-size: 1000
+    ttl-override-cap: 4096 # 逐键 TTL 覆盖表容量上限（达上限先回收死键，仍超限才整体清空）
     list-key-prefix: "course:list:"
     # ===== 高可用加固：击穿防护与熔断（阶段 A+）=====
     circuit-breaker:

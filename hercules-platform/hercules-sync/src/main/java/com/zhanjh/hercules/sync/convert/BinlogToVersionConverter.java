@@ -36,7 +36,8 @@ import java.util.Map;
  * </ol>
  *
  * <p>幂等与顺序：canal 投递为 at-least-once，同一 (表, 主键) 经 partitionHash 落同一队列保序；
- * 重复/回放消息因时钟判定为 EQUAL/BEFORE 被消费端丢弃。消费失败按 RECONSUME_LATER 重投
+ * 重复/回放消息因时钟判定为 EQUAL/BEFORE 被消费端丢弃。消费失败由监听器层
+ * 返回 SUSPEND_CURRENT_QUEUE_A_MOMENT 挂起当前队列重试
  * （监听器层职责），本类不吞异常——异常向上传播触发重试。
  *
  * <p>线程安全性：无实例可变状态；canal-mq 模式下由顺序消费者按队列串行调用。

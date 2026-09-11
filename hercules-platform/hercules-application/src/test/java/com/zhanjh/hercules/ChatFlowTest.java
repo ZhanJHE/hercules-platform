@@ -26,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>状态无关设计：用例全部以 admin 身份执行（无 studentId，执行侧必然拒绝），
  * 断言不依赖冒烟测试遗留的选课状态；LLM 响应由 StubLlmPort 脚本化，零网络。
+ * 会话归属用例额外以 st001 登录，但其请求在归属校验处即被拒绝，不会触达选课状态。
  *
  * @author zhanjh
  * @since 0.0.1
@@ -152,6 +153,91 @@ class ChatFlowTest {
                 .andExpect(jsonPath("$.data[0].content").value("推荐几门课"))
                 .andExpect(jsonPath("$.data[1].role").value("assistant"))
                 .andExpect(jsonPath("$.data[1].content").value("历史链路推荐文本"));
+    }
+
+    /**
+     * 验证点（会话归属）：同一用户复用同一 sessionId 不被归属校验拦截（回归保护）。
+     */
+    @Test
+    void sameUserCanReuseSession() throws Exception {
+        String admin = login("admin", "admin123");
+        llm.enqueue("第一次回复", "第二次回复");
+
+        MvcResult first = mvc.perform(post("/api/v1/chat")
+                        .header("Authorization", "Bearer " + admin)
+                        .contentType("application/json")
+                        .content("{\"sessionId\":\"chat-s4\",\"message\":\"推荐几门课\"}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mvc.perform(asyncDispatch(first)).andExpect(status().isOk());
+
+        // 复用同一 sessionId：归属一致，第二次仍正常受理并流式返回
+        MvcResult second = mvc.perform(post("/api/v1/chat")
+                        .header("Authorization", "Bearer " + admin)
+                        .contentType("application/json")
+                        .content("{\"sessionId\":\"chat-s4\",\"message\":\"再推荐几门课\"}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mvc.perform(asyncDispatch(second)).andExpect(status().isOk());
+
+        mvc.perform(get("/api/v1/chat/history/chat-s4").header("Authorization", "Bearer " + admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    /**
+     * 验证点（会话越权）：他人以同一 sessionId 发起对话 → 403（同步拒绝，不进入编排链，
+     * 因此也不会劫持该会话下已登记的待确认选课）。
+     */
+    @Test
+    void otherUserCannotPostToOwnedSession() throws Exception {
+        String admin = login("admin", "admin123");
+        String student = login("st001", "123456");
+        llm.enqueue("管理员会话回复");
+
+        MvcResult async = mvc.perform(post("/api/v1/chat")
+                        .header("Authorization", "Bearer " + admin)
+                        .contentType("application/json")
+                        .content("{\"sessionId\":\"chat-s5\",\"message\":\"推荐几门课\"}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mvc.perform(asyncDispatch(async)).andExpect(status().isOk());
+
+        // st001 复用 admin 的会话：归属不一致 → 403（该消息不会触达选课校验）
+        mvc.perform(post("/api/v1/chat")
+                        .header("Authorization", "Bearer " + student)
+                        .contentType("application/json")
+                        .content("{\"sessionId\":\"chat-s5\",\"message\":\"帮我选 CS101\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    /**
+     * 验证点（会话越权）：他人读取会话历史 → 403；未知 sessionId 返回空历史而非 403
+     * （只读判定不登记新会话，随机 sessionId 探测无副作用）。
+     */
+    @Test
+    void otherUserCannotReadOwnedSessionHistory() throws Exception {
+        String admin = login("admin", "admin123");
+        String student = login("st001", "123456");
+        llm.enqueue("会话归属校验用文本");
+
+        MvcResult async = mvc.perform(post("/api/v1/chat")
+                        .header("Authorization", "Bearer " + admin)
+                        .contentType("application/json")
+                        .content("{\"sessionId\":\"chat-s6\",\"message\":\"推荐几门课\"}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mvc.perform(asyncDispatch(async)).andExpect(status().isOk());
+
+        mvc.perform(get("/api/v1/chat/history/chat-s6").header("Authorization", "Bearer " + student))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
+
+        mvc.perform(get("/api/v1/chat/history/chat-never-used").header("Authorization", "Bearer " + student))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 }
 

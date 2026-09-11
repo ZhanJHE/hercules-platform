@@ -2,7 +2,8 @@
  * 对话领域 API（阶段 D/G）：POST SSE 流式（fetch + ReadableStream，EventSource 不支持 POST）。
  *
  * <p>事件流：token*（正文分片）→ meta（结构化数据 JSON）→ 完成；error 事件为兜底提示。
- * 401 时静默刷新一次并重放（与 axios 拦截器同语义，fetch 不经过 axios）。
+ * 401 时静默刷新一次并重放（与 axios 拦截器同语义，fetch 不经过 axios）；
+ * 403（会话归属他人）回调 onSessionInvalid，由上层重建会话。
  *
  * @author zhanjh
  * @since 0.1.0
@@ -18,6 +19,8 @@ export interface ChatStreamHandlers {
   onMeta: (meta: ChatMeta) => void
   onError: (message: string) => void
   onDone: () => void
+  /** 会话归属他人（HTTP 403）：上层应重建会话后提示用户重发（可选）。 */
+  onSessionInvalid?: () => void
 }
 
 /** 裸 axios：仅用于 401 刷新（与 request.ts 同一协调器语义）。 */
@@ -51,6 +54,11 @@ export async function streamChat(sessionId: string, message: string, handlers: C
   if (response.status === 401) {
     await coordinator.refreshOnce()
     response = await send()
+  }
+  if (response.status === 403) {
+    // 会话归属他人（换账号后沿用旧 sessionId 等）：交由上层重建会话，不当作普通失败
+    handlers.onSessionInvalid?.()
+    return
   }
   if (!response.ok || !response.body) {
     handlers.onError(`对话请求失败（HTTP ${response.status}）`)

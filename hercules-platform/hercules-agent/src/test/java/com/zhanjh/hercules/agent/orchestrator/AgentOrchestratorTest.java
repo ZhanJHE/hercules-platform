@@ -10,11 +10,14 @@ import com.zhanjh.hercules.agent.port.CourseQueryPort;
 import com.zhanjh.hercules.agent.port.EnrollmentPort;
 import com.zhanjh.hercules.agent.support.AgentTraceWriter;
 import com.zhanjh.hercules.mapper.AgentTraceMapper;
+import com.zhanjh.hercules.model.AgentTrace;
 import com.zhanjh.hercules.model.Course;
 import com.zhanjh.hercules.model.agent.AgentContext;
+import com.zhanjh.hercules.model.agent.AgentType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -177,6 +180,43 @@ class AgentOrchestratorTest {
         String text = String.join("", orchestrator.handle(adminCtx).tokens().collectList().block());
 
         assertThat(text).contains("仅学生角色可以执行选课操作");
+    }
+
+    /**
+     * 验证点（可观测）：推荐链落 trace 时携带真实 LLM 耗时，
+     * 即 t_agent_trace.llm_latency_ms 不再恒为 0（桩注入 60ms 首包延迟）。
+     */
+    @Test
+    void recommendationTraceRecordsRealLlmLatency() {
+        when(courseQueryPort.search(any(), org.mockito.ArgumentMatchers.eq(20))).thenReturn(List.of(
+                course(1L, "CS101", "程序设计基础")));
+        llm.enqueue("带首包延迟的推荐文本");
+        llm.setStreamDelayMillis(60);
+
+        // 必须消费完整流：trace 在 doOnComplete 中落库
+        orchestrator.handle(ctx("推荐几门课")).tokens().collectList().block();
+
+        ArgumentCaptor<AgentTrace> captor = ArgumentCaptor.forClass(AgentTrace.class);
+        verify(traceMapper).insert(captor.capture());
+        assertThat(captor.getValue().getAgentName()).isEqualTo(AgentType.RECOMMENDATION.name());
+        assertThat(captor.getValue().getLlmLatencyMs()).isGreaterThanOrEqualTo(60);
+    }
+
+    /**
+     * 验证点（可观测）：排课校验为纯规则智能体、不调用 LLM，其 trace 耗时为 0
+     * （0 的语义是「无 LLM 调用」，而非「未计量」）。
+     */
+    @Test
+    void ruleBasedTraceRecordsZeroLlmLatency() {
+        when(courseQueryPort.search("CS101", 10)).thenReturn(List.of(course(1L, "CS101", "程序设计基础")));
+        when(enrollmentPort.myEnrolledCourses(20240001L)).thenReturn(List.of());
+
+        orchestrator.handle(ctx("帮我选 CS101")).tokens().collectList().block();
+
+        ArgumentCaptor<AgentTrace> captor = ArgumentCaptor.forClass(AgentTrace.class);
+        verify(traceMapper).insert(captor.capture());
+        assertThat(captor.getValue().getAgentName()).isEqualTo(AgentType.SCHEDULING.name());
+        assertThat(captor.getValue().getLlmLatencyMs()).isZero();
     }
 
     /**

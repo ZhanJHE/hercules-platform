@@ -10,8 +10,9 @@ import java.util.function.Supplier;
  * → L2（Redis 分布式）→ loader（MySQL）的 cache-aside 读路径并逐级回填。
  *
  * <p>线程安全性：实现类基于 Caffeine 与 Lettuce 的线程安全原语，接口本身不引入状态，
- * 允许多线程并发调用；但不保证 invalidate 后其他节点立即可见
- * （跨节点 L1 失效由 hercules.sync 同步链异步广播）。
+ * 允许多线程并发调用；但不保证 invalidate 后其他节点立即可见——跨节点 L1 失效依赖
+ * hercules.sync 同步链：canal-mq 传输下经 Binlog 消息在消费端逐节点失效，
+ * 默认 in-process 传输下事件不出本 JVM，其他节点 L1 只能等各自 TTL 自然过期。
  *
  * <p>扩展点：新增实现（如引入 Redisson 的分布式锁版本）实现本接口替换即可，业务代码无需改动。
  *
@@ -45,7 +46,8 @@ public interface CacheManager {
 
     /**
      * 失效契约：同时删除 L2 与本节点 L1，用于数据变更后的主动清除；
-     * 其他节点的 L1 失效由 hercules.sync 同步链广播完成。
+     * 其他节点的 L1 失效由 hercules.sync 同步链广播完成（仅 canal-mq 传输下跨节点生效，
+     * in-process 传输的事件不出本 JVM）。
      *
      * @param key 待失效的缓存键，不允许为 null
      */
