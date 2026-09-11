@@ -1,182 +1,135 @@
-<div align="center">
+# Hercules —— 智慧校园选课服务平台
 
-# Hercules —— 智慧校园多智能体服务平台
+面向高校选课场景的一个后端为主的练手项目。要解决的问题是：课程数据被频繁读取，同时又要被频繁修改，缓存和数据库之间怎么保持一致。
 
-**基于多级缓存一致性治理 + 多智能体协作的高校选课服务平台**
-
-`Java 21` · `Spring Boot 3.5.x` · `Maven 多模块` · `Caffeine + Redis 多级缓存` · `向量时钟冲突消解`
-
-</div>
+技术栈：Java 21 · Spring Boot 3.5 · MyBatis-Plus · Caffeine + Redis · MySQL 8 · Vue 3
 
 ---
 
-## 📖 项目简介
+## 现在做到哪了
 
-Hercules 是一个面向高校选课场景的毕业设计项目，采用**四层分离架构**：
-
-- **L1 数据存储层**：MySQL 8 + Redis 7（后续接入 Milvus / Neo4j）；
-- **L2 一致性治理层**：多级缓存（Caffeine L1 → Redis L2 → MySQL）+ 基于向量时钟的并发冲突消解同步链（核心创新点）；
-- **L3 多智能体决策层**：路由 / 推荐 / 排课冲突 / 执行四类智能体协作（规划中）；
-- **L4 用户接入层**：Spring Cloud Gateway + Vue3 双端界面（规划中）。
-
-当前已完成**分布式缓存一致性治理核心**的可运行实现：课程查询走多级缓存、数据变更后由同步链刷新缓存、并发写冲突走字段级 LWW 合并，全链路可观测、可演示，后端 108 个 + 前端 17 个自动化测试全覆盖；并已完成双 Token 认证、独立网关、WSL2/Docker 全栈部署（十容器）、500 并发压测（5,027 req/s，错误率 0.0007%）、**真实 Binlog 同步链**（Canal 1.1.7 + RocketMQ 4.9.4，外部直改数据库 250ms 内同步缓存）、**多智能体对话入口**（Spring AI 1.0.6 + 智谱 GLM glm-4.5-air），以及 **Vue3 双端前端**（Element Plus + Pinia + SSE 流式对话 + 治理驾驶舱，http://localhost:8090）。
-
-## ✨ 核心特性
-
-- 🗂 **多级缓存**：Caffeine（L1）→ Redis（L2）→ MySQL 的 cache-aside 读路径，逐级回填，命中率统计；
-- 🕰 **向量时钟冲突消解**：每次缓存变更携带向量时钟，消费者判定「新版本应用 / 旧版本幂等丢弃 / 并发冲突字段级 LWW 合并」，版本持久化于 `t_cache_version`；
-- 🔒 **防超选选课**：条件 `UPDATE ... WHERE enrolled < capacity` 原子扣减 + 事务提交后（AFTER_COMMIT）同步刷新缓存，先提交、后同步；
-- 🔐 **双 Token 认证**：JWT（30min，jjwt 0.13.0）+ Refresh Token（7d，Redis 旋转式刷新），登出 jti 黑名单，BCrypt 密码，水平越权收敛（studentId 取自 token），应用内鉴权（阶段 H 迁网关统一验签）；
-- 🧪 **可测试性**：单元测试不依赖外部中间件（H2 内存库 + 内存桩 L2），端到端冒烟覆盖完整链路；
-- 📊 **可观测**：Micrometer 指标族（`hercules_cache_*` / `hercules_sync_*`）经 `/actuator/prometheus` 暴露，自定义命中率统计接口；
-- 🎬 **答辩演示钩子**：`simulate-conflict` 一键模拟双节点并发写冲突、`evict-local` 演示 L1 失效后 L2 回填；
-- 🚀 **一键启动**：根目录 `start.bat` 双击即起（打包 → 启动 → 健康检查 → 自动打开浏览器）。
-
-## 🧰 技术栈与组件
-
-| 分类 | 组件 | 版本 | 用途 |
-| :--- | :--- | :--- | :--- |
-| 语言 | Java | 21（兼容 JDK 25 运行） | 编译目标 `java.version=21` |
-| 核心框架 | Spring Boot | 3.5.16 | Web / Validation / Actuator |
-| 构建工具 | Maven (wrapper) | 3.9.16 | 11 模块多模块工程 |
-| 持久层 | MyBatis-Plus | 3.5.17（+ jsqlparser 模块） | ORM / 分页 / 条件构造 |
-| 数据库 | MySQL | 8.x | 业务库（连接串自动建库 + 幂等初始化脚本） |
-| 缓存 L1 | Caffeine | 3.2.x（Boot BOM 管理） | 进程内缓存，自定义 Expiry 逐键 TTL |
-| 缓存 L2 | Redis + Lettuce | 服务端 7.x / 客户端 6.6 | 分布式缓存（仅用 GET/SET EX/DEL 基础命令） |
-| 指标 | Micrometer | 1.15.x（+ prometheus registry） | 计数器 / Prometheus 端点 |
-| 高可用 | Resilience4j | 2.4.0 | Redis 熔断降级装饰器（OPEN 时读直连 DB，快速失败） |
-| 认证 | Spring Security + jjwt | 6.5 / 0.13.0 | 双 Token（JWT + Refresh）、BCrypt、jti 黑名单 |
-| 测试 | JUnit 5 + Mockito + AssertJ + MockMvc | Boot BOM 管理 | 单元 / 集成 / 端到端冒烟 |
-| 测试数据库 | H2 | 2.3.x（test scope） | MySQL 兼容模式内存库 |
-| 同步链传输 | Canal 1.1.7 + RocketMQ 4.9.4（容器化） | **阶段 B 已接入**：MySQL ROW Binlog → Canal Server（MQ 模式投递 flatMessage）→ RocketMQ 顺序队列 → 应用消费者；`hercules.sync.transport` 可切回进程内总线（单机/测试形态） |
-| 智能体 | Spring AI（OpenAI 兼容接入智谱 GLM） | 1.0.6 / glm-4.5-air | **阶段 D 已接入**：意图路由 / 推荐 / 排课冲突（纯规则）/ 确认制执行，SSE 流式对话，t_agent_trace 全程落库 |
-| RAG（规划） | 向量检索 + Neo4j | Spring AI VectorStore / 5.x | 向量检索（预留 Milvus 扩展点）+ 图检索 |
-| 网关 | Spring Cloud Gateway | 2025.0.3 | ✅ 已接入：路由 / JWT 验签 / traceId 下发 |
-| 前端 | Vue 3.5 + Vite 7 + Element Plus + Pinia | 3.5 / 7 / 2.x | **阶段 G 已接入**：左侧菜单 + 顶栏双端布局，课程/选课/对话（SSE 流式）/治理驾驶舱，nginx 容器托管（:8090） |
-
-## 🏗 项目结构
-
-```
-hercules-platform/               # Maven 多模块父工程
-├── hercules-common/             # 公共：统一响应体 / 异常 / JSON 工具 / 实体 / Mapper
-├── hercules-cache/              # 缓存治理：多级缓存门面、TTL 策略、命中统计 ★
-├── hercules-sync/               # 数据同步：向量时钟、生产/消费、LWW 合并 ★
-├── hercules-inspector/          # 巡检自愈（开发中）
-├── hercules-rag/                # RAG 检索（规划）
-├── hercules-agent/              # 多智能体（规划）
-├── hercules-observability/      # 可观测性聚合（规划）
-├── hercules-admin/              # 管控台后端（规划）
-├── hercules-gateway/            # Spring Cloud Gateway 独立网关（规划）
-├── hercules-application/        # ★ 唯一可执行聚合模块（启动类 / REST / 配置）
-└── hercules-ui/                 # Vue3 前端（规划）
-```
-
-依赖方向：`common ← cache ← sync ← application`，空模块按路线图逐步填充。
-
-## 🚀 快速开始
-
-### 环境要求
-
-| 组件 | 要求 |
+| 部分 | 状态 |
 | :--- | :--- |
-| JDK | 21+ |
-| MySQL | 8.x（本机 3306；无需手工建库，连接串自动创建） |
-| Redis | 3.x+（本机 6379，无密码） |
-| Docker | 仅后续阶段需要，**当前非必需** |
+| 多级缓存 + 向量时钟冲突消解 | 已完成 |
+| Canal 监听 Binlog 同步缓存 | 已完成 |
+| 双 Token 认证、独立网关 | 已完成 |
+| 多智能体对话（推荐/排课/选课） | 基本完成，推荐理由的非结构化数据依据没做 |
+| Vue3 前端（学生端 + 管理端） | 已完成 |
+| 容器部署、压测 | 部署已完成；压测数据口径已失效，需要重测 |
+| 巡检引擎、RAG、可观测性补齐 | 没做 |
 
-### 一键启动（Windows）
+逐条需求的完成情况见 [开发文档/路线图.md](./开发文档/路线图.md)。
 
-```bat
-:: 1) 克隆
-git clone https://github.com/ZhanJHE/hercules-platform.git
-cd hercules-platform
+测试：后端 108 个用例、前端 17 个用例，全部通过（`mvn test`、`npm test`）。
 
-:: 2) 配置本机数据库凭据（已 gitignore）
-::    创建 hercules-platform/hercules-application/src/main/resources/application-local.yml
-::    模板见《开发文档/环境配置与部署.md》
+---
 
-:: 3) 双击 start.bat（打包 → 启动 → 健康检查 → 自动打开浏览器）
-start.bat
-```
+## 怎么跑起来
 
-### 手动命令
+### 本机直跑（最少依赖）
+
+需要 JDK 21+、MySQL 8、Redis。
 
 ```powershell
 cd hercules-platform
-.\mvnw.cmd test                    # 全量测试（H2 + 内存桩，不依赖本机中间件，应 108/108 通过）
-.\mvnw.cmd package -DskipTests     # 打包
+
+# 1) 先配本机数据库账号
+#    新建 hercules-platform/hercules-application/src/main/resources/application-local.yml
+#    内容模板见《开发文档/环境配置与部署.md》§1.3
+
+# 2) 跑测试（用 H2 内存库，不依赖本机 MySQL 和 Redis）
+.\mvnw.cmd test
+
+# 3) 打包并启动
+.\mvnw.cmd package -DskipTests
 java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
 ```
 
-> `mvnw.cmd` 依赖 PATH 中的 Windows PowerShell（Maven Wrapper 固有行为）。若环境中 `powershell`
-> 不可解析，改用本机 Maven：`mvn -f pom.xml test`，或 `.m2\wrapper\dists` 下 wrapper 已下载的发行版。
+启动成功的标志：`GET http://127.0.0.1:8080/actuator/health` 返回 `UP`。
 
-启动成功判据：`GET http://127.0.0.1:8080/actuator/health` 返回 `UP`。
+也可以直接双击根目录的 `start.bat`：它会打包、启动、检查健康状态，然后打开浏览器。
 
-## 🔌 API 概览
+说明：`mvnw.cmd` 需要 PATH 里有 Windows PowerShell（Maven Wrapper 自带的行为）。如果没有，改用 `mvn -f pom.xml test`。
 
-| Method | Path | 说明 |
-| :--- | :--- | :--- |
-| POST | `/api/v1/auth/login` | 登录（用户名密码 → 双 Token） |
-| POST | `/api/v1/auth/refresh` | 刷新（旋转式换新 Token 对，白名单） |
-| POST | `/api/v1/auth/logout` | 登出（jti 入黑名单 + 吊销 refresh） |
-| GET | `/api/v1/courses?page=&size=&keyword=` | 课程分页 / 关键字检索（多级缓存，需登录） |
-| GET | `/api/v1/courses/{id}` | 课程详情（纳入向量时钟版本链） |
-| POST | `/api/v1/enrollment` | 选课（STUDENT；courseId 传参，studentId 取自 token） |
-| DELETE | `/api/v1/enrollment?courseId=` | 退课（STUDENT） |
-| GET | `/api/v1/enrollment/mine` | 我的选课记录 |
-| POST | `/api/v1/chat` | 自然语言对话（SSE 流式 token/meta 事件，需登录；会话归属绑定当前用户） |
-| GET | `/api/v1/chat/history/{sessionId}` | 会话历史（仅会话属主可读，他人 403） |
-| GET | `/api/v1/cache/stats` | 命中率 / 各级命中 / 同步与冲突计数（ADMIN） |
-| POST | `/api/v1/debug/simulate-conflict` | 模拟双节点并发写冲突（ADMIN） |
-| POST | `/api/v1/debug/evict-local?key=` | 手动失效 L1（ADMIN） |
-| GET | `/actuator/prometheus` | Micrometer 指标（白名单） |
+### 容器（完整形态，十个容器）
 
-> 除白名单外所有接口需 `Authorization: Bearer <accessToken>`；演示账号 `admin/admin123`、`st001~003/123456`（由启动器幂等播种）。
+需要 Docker Desktop。会起 MySQL、Redis、应用、网关、前端、Prometheus、Grafana、RocketMQ、Canal。
 
-## 🕰 缓存一致性同步链（核心机制）
-
-```
-写路径  选课事务（防超选条件 UPDATE）
-        → AFTER_COMMIT 发布 VersionedValue（时钟 = 存量时钟 ⊕ 本节点自增）
-消费端  比对 t_cache_version 存量向量时钟：
-        ├─ AFTER      → 写 Redis + 失效 Caffeine + upsert 版本记录
-        ├─ EQUAL/BEFORE → 丢弃（幂等）
-        └─ CONCURRENT → 字段级 LWW 合并后应用，时钟取并集，冲突计数告警
+```powershell
+cd hercules-platform/deploy
+docker compose up -d --build
 ```
 
-## 🗺 路线图
+浏览器入口 `http://localhost:8090`。详见《开发文档/环境配置与部署.md》第二节。
 
-| 阶段 | 内容 | 状态 |
-| :--- | :--- | :--- |
-| 阶段 0 | MVP 纵向切片 + 全量 Javadoc + 修复 | ✅ |
-| 阶段 A | Maven 多模块化重构（11 模块） | ✅ |
-| 阶段 A+ | 高可用加固（超时/熔断/防击穿）+ 双 Token 认证 + 日志设计 | ✅ |
-| 阶段 H-1~H-4 | WSL2/Docker 全栈部署 + 最小网关 + JMeter 500 并发阶梯压测与调优 | ✅ |
-| 阶段 B | 真实 Binlog 同步链（Canal 1.1.7 + RocketMQ 4.9.4 容器版，写路径异步化削峰） | ✅ |
-| 阶段 C | 巡检引擎 + 补偿 SQL 自愈 | ⏳ 下一步 |
-| 阶段 D | Spring AI 多智能体（路由/推荐/排课/执行，GLM glm-4.5-air，SSE 流式 + 确认制选课） | ✅ |
-| 阶段 E | RAG（向量检索 + Neo4j 图检索） | ⏳ 下一步 |
-| 阶段 F | 可观测性大盘完善（Prometheus + 链路追踪 + Grafana） | ⏳ |
-| 阶段 G | Vue3 双端前端（左侧菜单 + 顶栏布局，对话页 SSE 流式，驾驶舱 20s 轮询） | ✅ |
-| 阶段 H-5 | 压测报告收尾与可选单变量归因实验 | ⏳ |
-
-## 📚 文档
-
-| 文档 | 说明 |
-| :--- | :--- |
-| [开发文档/起步文档.md](./开发文档/起步文档.md) | 项目总体规划（需求 / 架构 / 12 周迭代计划） |
-| [开发文档/项目讲解.html](./开发文档/项目讲解.html) | 单文件网页版项目讲解（逻辑 / 结构设计 / 技术，可离线打开） |
-| [开发文档/包结构说明.md](./开发文档/包结构说明.md) | 逐类详细注释的包结构 + 7 张类图（`开发文档/images/`） |
-| [开发文档/环境配置与部署.md](./开发文档/环境配置与部署.md) | WSL2 Docker 五容器部署与压测使用指南 |
-| [开发文档/测试报告.md](./开发文档/测试报告.md) | 自动化测试 / 冒烟 / 故障演练 / 压测明细 |
-| [开发文档/工作日志.md](./开发文档/工作日志.md) | 开发过程日志与已知事项 |
-| [hercules-platform/README.md](./hercules-platform/README.md) | 平台工程说明 |
+演示账号：`admin/admin123`、`st001`~`st003/123456`（启动时自动创建）。
 
 ---
 
-<div align="center">
+## 接口
 
-**Hercules** · 智慧校园多智能体服务平台 · 毕业设计项目
+除白名单外，所有接口都要带 `Authorization: Bearer <accessToken>`。
 
-</div>
+| 方法 | 路径 | 说明 | 权限 |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/v1/auth/login` | 登录，返回两个令牌 | 公开 |
+| POST | `/api/v1/auth/refresh` | 刷新令牌（换新的，旧的作废） | 公开 |
+| POST | `/api/v1/auth/logout` | 登出 | 登录即可 |
+| GET | `/api/v1/courses?page=&size=&keyword=` | 课程列表和搜索 | 登录即可 |
+| GET | `/api/v1/courses/{id}` | 课程详情 | 登录即可 |
+| POST | `/api/v1/enrollment` | 选课 | 学生 |
+| DELETE | `/api/v1/enrollment?courseId=` | 退课 | 学生 |
+| GET | `/api/v1/enrollment/mine` | 我的选课 | 学生 |
+| POST | `/api/v1/chat` | 对话（流式返回） | 登录即可 |
+| GET | `/api/v1/chat/history/{sessionId}` | 会话历史 | 仅会话本人 |
+| GET | `/api/v1/cache/stats` | 缓存命中率和同步计数 | 管理员 |
+| POST | `/api/v1/debug/simulate-conflict` | 模拟两个节点同时写同一条数据 | 管理员 |
+| POST | `/api/v1/debug/evict-local?key=` | 清掉本机一级缓存，用来演示二级缓存回填 | 管理员 |
+| GET | `/actuator/prometheus` | 监控指标 | 公开 |
+
+---
+
+## 数据是怎么保持一致的
+
+课程详情这类数据走两级缓存：Caffeine（进程内）→ Redis → MySQL，逐级回填。列表数据不放进这套版本机制，只给 10 秒的过期时间。
+
+数据被修改时（比如选课扣人数），事务提交后会产生一条带版本号的消息，消费者拿它和数据库里存的历史版本比：
+
+- 新的比旧的更新 → 用它刷新缓存；
+- 一样或更旧 → 丢掉，不重复处理；
+- 两边互有大小（说明是并发写的）→ 按字段比时间戳，谁的时间新用谁的，然后把两边的版本号合并。
+
+发送消息的通道有两种，配置项 `hercules.sync.transport` 切换：`in-process` 是进程内直接发（本机跑和测试用），`canal-mq` 是从 MySQL 的 Binlog 经 Canal 和 RocketMQ 传过来（容器部署用）。后者可以做到完全绕开应用直接改数据库，缓存也会自动更新，实测 250ms。
+
+详细说明见 [开发文档/包结构说明.md](./开发文档/包结构说明.md)。
+
+---
+
+## 文档怎么看
+
+| 文档 | 里面是什么 | 什么时候看 |
+| :--- | :--- | :--- |
+| [路线图.md](./开发文档/路线图.md) | 每条需求做了没有，没做的差在哪 | 想知道进度 |
+| [起步文档.md](./开发文档/起步文档.md) | 开工时写的需求和设计，作为基线不再改动 | 想知道原本打算做什么 |
+| [包结构说明.md](./开发文档/包结构说明.md) | 每个包和类干什么，缓存键有哪些 | 要读代码或改代码 |
+| [设计类.md](./开发文档/设计类.md) | 开工时画的类图（含未实现的模块） | 想看设计思路 |
+| [认证设计.md](./开发文档/认证设计.md) | 两套令牌怎么分工 | 改登录相关功能 |
+| [日志设计.md](./开发文档/日志设计.md) | 日志怎么分文件、traceId 怎么传 | 查线上问题 |
+| [前端设计.md](./开发文档/前端设计.md) | 页面、路由、状态管理怎么分 | 改前端 |
+| [环境配置与部署.md](./开发文档/环境配置与部署.md) | 本机和容器怎么装、怎么起、出错了怎么办 | 第一次跑起来 |
+| [测试报告.md](./开发文档/测试报告.md) | 跑了哪些测试、结果是多少 | 想复核数据 |
+| [工作日志.md](./开发文档/工作日志.md) | 哪天做了什么、踩了哪些坑 | 回顾过程 |
+| [项目介绍.md](./开发文档/项目介绍.md) | 简历用的一段话 | 写简历 |
+
+已知的重复：架构和模块清单在《起步文档》《包结构说明》《设计类》里各有一份，改架构时要一起改。
+
+## 已知没做和没做对的
+
+- **巡检引擎没做**（`hercules-inspector` 模块是空的）。导致缓存和数据库真出现不一致时没有检测手段。
+- **eBPF 采集没做**，实际用的是 Micrometer 手工埋点。这一条在起步文档里标的是 P0。
+- **分布式链路追踪没做**。只有 traceId 写进日志，能按它串日志，但没有各段耗时。
+- **一致性健康度评分没做**。
+- **性能数据要重测**。现有的压测结果测于 2026-09-07，之后加了选课唯一键、把写路径改成异步、加了智能体和前端，口径变了。
+- 内存里的会话数据在应用重启后会丢；应用本身是单实例部署，没有多节点验证。
+
+完整清单和原因见 [开发文档/路线图.md](./开发文档/路线图.md)。

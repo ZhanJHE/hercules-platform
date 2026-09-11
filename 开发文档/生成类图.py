@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-extract_mermaid.py —— 从《设计类.md》提取全部 mermaid 类图并渲染为 PNG 图片。
+生成类图.py —— 从《设计类.md》提取全部 mermaid 类图并渲染为 PNG 图片。
 
 用法：
-    python extract_mermaid.py
+    python 生成类图.py
 
 实现说明：
 - 用正则按顺序提取 ```mermaid 代码块，并以最近的 "## " 标题作为图片命名依据；
@@ -27,7 +27,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 ROOT = Path(r"C:\Users\ZhanJH\Desktop\MyProject\Hercules")
 SRC = ROOT / "开发文档" / "设计类.md"
-OUT = ROOT / "开发文档" / "images"
+OUT = ROOT / "开发文档" / "图片"
 OUT.mkdir(parents=True, exist_ok=True)
 
 
