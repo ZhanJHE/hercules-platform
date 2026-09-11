@@ -8,6 +8,18 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
+  {
+    // 根路径按登录状态与角色分流：未登录去登录页，已登录去对应端首页
+    path: '/',
+    name: 'home',
+    redirect: () => {
+      const auth = useAuthStore()
+      if (!auth.isLoggedIn) {
+        return '/login'
+      }
+      return auth.role === 'ADMIN' ? '/admin/dashboard' : '/student/courses'
+    },
+  },
   { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { public: true, title: '登录' } },
   {
     path: '/student',
