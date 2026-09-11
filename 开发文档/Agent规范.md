@@ -42,7 +42,7 @@
 ```powershell
 # 正常环境
 cd hercules-platform
-.\mvnw.cmd test          # 108 个用例
+.\mvnw.cmd test          # 113 个用例
 
 # mvnw.cmd 报 'powershell' 不是内部或外部命令 时（PATH 里没有 Windows PowerShell）
 mvn -f pom.xml test

@@ -8,6 +8,7 @@ import com.zhanjh.hercules.common.R;
 import com.zhanjh.hercules.mapper.CourseMapper;
 import com.zhanjh.hercules.model.CacheVersion;
 import com.zhanjh.hercules.model.Course;
+import com.zhanjh.hercules.sync.clock.ClockRelation;
 import com.zhanjh.hercules.sync.clock.VectorClock;
 import com.zhanjh.hercules.sync.model.VersionedValue;
 import com.zhanjh.hercules.sync.producer.InProcessEventBusProducer;
@@ -49,6 +50,8 @@ import java.util.Map;
 @RequestMapping("/api/v1/debug")
 public class DebugController {
 
+    /** 模拟节点的标识，与真实节点（hercules.sync.node-id，默认 node-1）区分开，两者分量互不支配。 */
+    private static final String SIM_NODE_ID = "node-sim";
     /**
      * 冲突模拟请求体。
      *
@@ -97,22 +100,27 @@ public class DebugController {
      *
      * <p>机制：
      * <ol>
-     *   <li>发布版本携带的时钟只含自身分量 {@code {"node-sim":1}}，不叠加存量时钟——
-     *       与存量时钟（含 node-1 分量）互不支配，消费端 compare 判定 CONCURRENT，
-     *       必然走字段级 LWW 合并分支；</li>
+     *   <li>模拟版本携带的时钟只含 node-sim 一个分量，不携带真实节点的分量，
+     *       因此与「本地已提交的改动」互不支配，消费端 compare 判 CONCURRENT，
+     *       走字段级 LWW 合并分支；</li>
+     *   <li>node-sim 的取值不是固定的 1，而是「存量时钟里 node-sim 的值 + 1」。
+     *       这是为了可重复演示：若固定写 1，第二次调用时存量时钟已经含有 node-sim（值 ≥ 1），
+     *       新时钟会被存量时钟支配、判为过期消息直接丢弃，而接口仍然返回成功——
+     *       表现为静默失效，现场连点两次就会踩到；</li>
      *   <li>模拟值时间戳取当前毫秒，晚于存量版本 → 合并后 courseName 取模拟值、
      *       其余字段保留旧值（FieldLwwMergeStrategy：值不同的字段按时间戳裁决）；</li>
-     *   <li>前置条件：该课程此前至少发生过一次选课/发布（t_cache_version 已有记录）。
-     *       若无存量版本，消费端以空时钟比较，incoming 支配 → 按新版本直接应用，不触发冲突，
-     *       此时响应中 storedVersionBefore 返回提示文案。</li>
+     *   <li>响应里的 relation 字段直接给出本次的支配关系判定（CONCURRENT/AFTER/EQUAL/BEFORE），
+     *       effect 字段说明对应的实际效果。若该课程从未发生过真实写入（t_cache_version 无记录），
+     *       没有可冲突的对象，判定会是 AFTER，按新版本直接应用，此时不会有合并效果——这一点在响应里写清楚，
+     *       不再用固定文案谎报「已同步应用」。</li>
      * </ol>
      *
      * <p>请求示例：{@code POST /api/v1/debug/simulate-conflict}，
      * 请求体 {@code {"courseId":1,"courseName":"并发改名"}}
      *
      * @param request 冲突模拟请求体（@Valid 校验 courseId 非空）
-     * @return data 含 published（恒 true）、simNodeId（node-sim）、simClock（时钟 JSON 字符串）、
-     *         storedVersionBefore（调用时刻的存量版本号，无则返回提示文案）、hint（验证指引）
+     * @return data 含 published（恒 true）、simNodeId、simClock、storedClock（调用时刻的存量时钟）、
+     *         relation（支配关系）、effect（本次实际效果）、storedVersionBefore（存量版本号，无则提示文案）、hint
      * @throws BusinessException code=400（HTTP 400）courseId 缺失；
      *                           code=404（HTTP 404），课程 ID 不存在时抛出
      */
@@ -123,25 +131,49 @@ public class DebugController {
             throw new BusinessException(404, "课程不存在: " + request.courseId());
         }
         String key = CacheKeys.course(request.courseId());
-        // 存量版本仅用于响应展示调用时刻的快照；真正的冲突判定由消费端读取 t_cache_version 最新记录进行
         CacheVersion stored = versionReader.find(key).orElse(null);
+        VectorClock storedClock = stored == null
+                ? new VectorClock()
+                : VectorClock.fromJson(stored.getVectorClockJson());
 
-        // 时钟只含 node-sim 自身分量（不叠加存量时钟），与存量时钟（node-1 分量）互不支配 → 必走 CONCURRENT 分支
-        VectorClock simClock = new VectorClock().increment("node-sim");
+        // 只取 node-sim 一个分量，且严格大于存量里 node-sim 的值：
+        // 缺掉真实节点的分量 → 与本地改动互不支配（CONCURRENT）；自己分量递增 → 每次都能触发，不会第二次就失效
+        long simPrev = storedClock.snapshot().getOrDefault(SIM_NODE_ID, 0L);
+        VectorClock simClock = new VectorClock(Map.of(SIM_NODE_ID, simPrev + 1));
+        ClockRelation relation = VectorClock.compare(simClock, storedClock);
+
         course.setCourseName(StringUtils.hasText(request.courseName())
                 ? request.courseName()
                 : course.getCourseName() + "[冲突模拟]");
         // 时间戳取当前毫秒：晚于存量版本 updateTime → 字段级 LWW 裁决时模拟值获胜
         producer.publish(new VersionedValue(key, JsonUtil.toJson(course),
-                "node-sim", System.currentTimeMillis(), simClock));
+                SIM_NODE_ID, System.currentTimeMillis(), simClock));
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("published", true);
-        data.put("simNodeId", "node-sim");
+        data.put("simNodeId", SIM_NODE_ID);
         data.put("simClock", simClock.toJson());
-        data.put("storedVersionBefore", stored == null ? "(无存量版本，本次按新版本应用，未触发冲突)" : stored.getCurrentVersion());
-        data.put("hint", "消费端已同步应用，GET /api/v1/courses/" + request.courseId() + " 查看字段级合并结果");
+        data.put("storedClock", storedClock.toJson());
+        data.put("relation", relation.name());
+        data.put("effect", describeEffect(relation));
+        data.put("storedVersionBefore", stored == null ? "(无存量版本)" : stored.getCurrentVersion());
+        data.put("hint", "消费端已按 relation 处理；GET /api/v1/courses/" + request.courseId() + " 查看结果");
         return R.ok(data);
+    }
+
+    /**
+     * 把支配关系翻译成本次演示的实际效果，避免调用方看不出到底有没有触发合并。
+     *
+     * @param relation 时钟支配关系
+     * @return 一句话说明
+     */
+    private static String describeEffect(ClockRelation relation) {
+        return switch (relation) {
+            case CONCURRENT -> "并发冲突：走字段级合并，课程名取模拟值，其它字段保留原值";
+            case AFTER -> "不是并发：按新版本直接应用（该课程此前没有真实写入，没有可冲突的对象）";
+            case EQUAL -> "与存量版本相同：会被当作重复消息丢弃，本次没有效果";
+            case BEFORE -> "比存量版本旧：会被当作过期消息丢弃，本次没有效果";
+        };
     }
 
     /**
