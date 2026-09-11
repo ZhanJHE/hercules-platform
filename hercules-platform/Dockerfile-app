@@ -3,6 +3,6 @@
 ARG BASE_IMAGE=eclipse-temurin:21-jre
 FROM ${BASE_IMAGE}
 WORKDIR /app
-COPY hercules-application/target/hercules-application-0.0.1-SNAPSHOT.jar /app/app.jar
+COPY hercules-application/target/hercules-application-0.1.0-SNAPSHOT.jar /app/app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

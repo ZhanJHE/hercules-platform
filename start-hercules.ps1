@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 #  Hercules 一键启动脚本（由根目录 start.bat 调起，也可单独运行）
 #  用法：双击 start.bat；或 powershell -File start-hercules.ps1
 #  行为：检查环境 → 端口占用检测 →（必要时）打包 → 新窗口启动应用
@@ -8,7 +8,7 @@
 $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $platform  = Join-Path $scriptDir 'hercules-platform'
-$jarPath   = Join-Path $platform 'hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar'
+$jarPath   = Join-Path $platform 'hercules-application\target\hercules-application-0.1.0-SNAPSHOT.jar'
 $base      = 'http://127.0.0.1:8080'
 
 function Write-Step([string]$msg) { Write-Host "==> $msg" -ForegroundColor Cyan }

@@ -2,6 +2,6 @@
 ARG BASE_IMAGE=eclipse-temurin:21-jre
 FROM ${BASE_IMAGE}
 WORKDIR /app
-COPY hercules-gateway/target/hercules-gateway-0.0.1-SNAPSHOT.jar /app/gateway.jar
+COPY hercules-gateway/target/hercules-gateway-0.1.0-SNAPSHOT.jar /app/gateway.jar
 EXPOSE 8081 8082
 ENTRYPOINT ["java", "-jar", "/app/gateway.jar"]

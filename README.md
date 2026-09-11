@@ -38,7 +38,7 @@ cd hercules-platform
 
 # 3) 打包并启动
 .\mvnw.cmd package -DskipTests
-java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
+java -jar hercules-application\target\hercules-application-0.1.0-SNAPSHOT.jar
 ```
 
 启动成功的标志：`GET http://127.0.0.1:8080/actuator/health` 返回 `UP`。
@@ -107,7 +107,7 @@ docker compose up -d --build
 | [测试报告-2026-09-11.md](./开发文档/测试报告-2026-09-11.md) | 跑了哪些测试、结果是多少 | 想复核数据 |
 | [工作日志.md](./开发文档/工作日志.md) | 哪天做了什么、踩了哪些坑 | 回顾过程 |
 | [历史基线归档.md](./开发文档/历史基线归档.md) | 开工时写的规划和需求，含风险表和论文结构建议 | 想知道原本打算做什么 |
-| [Agent规范.md](./开发文档/Agent规范.md) | 让 Agent 改这个项目时要守的规则 | 让 AI 动代码之前 |
+| [Agent.md](./Agent.md) | 默认 Agent 规范：约束、文档、版本控制、工作流，以及本项目专属细则 | 让 AI 动代码之前 |
 
 文件名里带日期的那份，日期是最后一次更新的日期。更新测试后要改文件名，并同步《路线图》和本文件里的链接。
 

@@ -28,7 +28,7 @@
 cd hercules-platform
 .\mvnw.cmd test                    # 全模块 113 个测试，用 H2 内存库，不依赖本机 MySQL/Redis
 .\mvnw.cmd package -DskipTests
-java -jar hercules-application\target\hercules-application-0.0.1-SNAPSHOT.jar
+java -jar hercules-application\target\hercules-application-0.1.0-SNAPSHOT.jar
 ```
 
 数据库账号配在 `hercules-application/src/main/resources/application-local.yml`（已 gitignore，不会提交）。

@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.zhanjh</groupId>
 	<artifactId>hercules-platform</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.1.0-SNAPSHOT</version>
 	<packaging>pom</packaging>
 	<name>hercules-platform</name>
 	<description>智慧校园多智能体服务平台 —— 分布式缓存一致性治理 + 多智能体（Maven 多模块父工程）</description>
