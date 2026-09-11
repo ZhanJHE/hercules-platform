@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Hercules 架构图</title>
+<style>
+  :root {
+    --line: #c9d2dd;
+    --bg: #f6f8fa;
+    --box: #ffffff;
+    --key: #e8f0fb;
+    --warn: #fdf0e3;
+    --text: #222;
+    --sub: #5b6673;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 20px 64px;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.7 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 8px; }
+  h2 { font-size: 19px; margin: 40px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .note { color: var(--sub); font-size: 13px; margin: 0 0 4px; }
+  figure { margin: 14px 0 0; }
+  figcaption { color: var(--sub); font-size: 13px; margin-top: 10px; }
+  .box {
+    background: var(--box);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 14px;
+  }
+  .box b { font-weight: 600; }
+  .box small { display: block; color: var(--sub); font-size: 12px; margin-top: 2px; }
+  .row { display: flex; gap: 12px; align-items: stretch; }
+  .row > * { flex: 1; }
+  .stack > * + * { margin-top: 10px; }
+  .center { text-align: center; }
+  .arrow { text-align: center; color: var(--sub); font-size: 18px; line-height: 1; margin: 6px 0; }
+  .layer { border-left: 3px solid #6b8cba; }
+  .layer h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: #2f4a70; }
+  .layer .row > .box { background: #fbfcfe; }
+  .key { background: var(--key); border-color: #a9c3e6; }
+  .warn { background: var(--warn); border-color: #e0b183; }
+  .tag {
+    display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 10px;
+    background: #e6ebf2; color: #41505f; margin-left: 6px; vertical-align: 1px;
+  }
+  .tag.no { background: #f6dfd0; color: #8a4b1d; }
+  .steps { counter-reset: s; }
+  .step { position: relative; padding-left: 34px; margin: 8px 0; }
+  .step::before {
+    counter-increment: s; content: counter(s);
+    position: absolute; left: 0; top: 2px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #4a6f9e; color: #fff; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  table { border-collapse: collapse; width: 100%; background: var(--box); font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; }
+  th { background: #eef2f7; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>Hercules 架构图</h1>
+  <p class="note">这份文件用 HTML 维护项目的架构图，不再用脚本生成图片。内容以代码为准，最后更新：2026-09-11。</p>
+  <p class="note">代码结构看《包结构说明.md》，需求状态看《路线图.md》。图里标了"未实现"的部分，代码里确实没有。</p>
+
+  <!-- ============ 图 1 ============ -->
+  <h2>图 1　分层结构</h2>
+  <figure>
+    <div class="stack">
+      <div class="box layer">
+        <h3>接入层</h3>
+        <div class="row">
+          <div class="box">浏览器<span class="tag">已完成</span><small>Vue 3 前端，学生端和管理端</small></div>
+          <div class="box">网关 :8081<span class="tag">已完成</span><small>验签、注入用户信息头、生成 traceId</small></div>
+        </div>
+      </div>
+      <div class="box layer">
+        <h3>应用层</h3>
+        <div class="row">
+          <div class="box">hercules-application :8080<span class="tag">已完成</span><small>接口、安全、对话、种子数据</small></div>
+          <div class="box">hercules-agent<span class="tag">已完成</span><small>四个智能体，调智谱 GLM</small></div>
+        </div>
+      </div>
+      <div class="box layer">
+        <h3>一致性治理层</h3>
+        <div class="row">
+          <div class="box">hercules-cache<span class="tag">已完成</span><small>两级缓存、熔断、防击穿</small></div>
+          <div class="box">hercules-sync<span class="tag">已完成</span><small>向量时钟、版本消息、字段合并</small></div>
+          <div class="box warn">hercules-inspector<span class="tag no">未实现</span><small>巡检与自愈，模块内无代码</small></div>
+        </div>
+      </div>
+      <div class="box layer">
+        <h3>存储层</h3>
+        <div class="row">
+          <div class="box">Redis<span class="tag">已完成</span><small>二级缓存、令牌白名单与黑名单</small></div>
+          <div class="box">MySQL 8<span class="tag">已完成</span><small>业务库，开启 Row Binlog</small></div>
+          <div class="box warn">Milvus + Neo4j<span class="tag no">未实现</span><small>RAG 用，没做</small></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>四层结构。智能体层不直接依赖应用层：它用 <code>port/</code> 下的接口声明需要什么业务能力，由应用层实现。</figcaption>
+  </figure>
+
+  <!-- ============ 图 2 ============ -->
+  <h2>图 2　读课程数据的路径</h2>
+  <figure>
+    <div class="stack">
+      <div class="box">请求进来</div>
+      <div class="arrow">↓</div>
+      <div class="box key">一级缓存 Caffeine（进程内）<small>命中就返回。详情键 60 秒过期，列表键 10 秒过期</small></div>
+      <div class="arrow">↓ 没命中</div>
+      <div class="box key">二级缓存 Redis<small>命中就返回，并回填一级缓存。详情键 300 秒过期</small></div>
+      <div class="arrow">↓ 没命中</div>
+      <div class="box">合并同一个键的并发请求（单飞）<small>同时来的相同请求只放一个去查数据库，其余等它的结果</small></div>
+      <div class="arrow">↓</div>
+      <div class="box">抢分布式回源锁（Redis SET NX）<small>抢不到就每 50 毫秒看一眼二级缓存，最多等 2 秒</small></div>
+      <div class="arrow">↓</div>
+      <div class="box">查 MySQL，然后往二级、一级缓存回填</div>
+    </div>
+    <figcaption>Redis 挂掉时：熔断器打开，跳过二级缓存直接查数据库，请求不会被拖住。列表键不参与下面图 3 的版本机制，靠 10 秒过期兜底。</figcaption>
+  </figure>
+
+  <!-- ============ 图 3 ============ -->
+  <h2>图 3　数据变更后缓存怎么更新</h2>
+  <figure>
+    <div class="stack">
+      <div class="step">业务事务写 MySQL 并提交。比如选课扣人数，用的是带条件的 UPDATE（<code>WHERE enrolled &lt; capacity</code>），改到 0 行就返回 409，防止超选。</div>
+      <div class="step">事务提交后产生一条版本消息：缓存键、新值、节点名、时间戳，以及一个向量时钟。时钟的算法是"库里存的旧时钟再把自己加一"。</div>
+      <div class="step">消息送到消费者。有两条路：
+        <div class="row" style="margin-top:8px">
+          <div class="box">进程内事件总线<span class="tag">本机 / 测试</span><small>配置 <code>transport=in-process</code></small></div>
+          <div class="box">Canal 读 Binlog → RocketMQ → 消费者<span class="tag">容器部署</span><small>配置 <code>transport=canal-mq</code>。这条路绕开应用直接改数据库也能同步</small></div>
+        </div>
+      </div>
+      <div class="step">消费者拿新时钟和数据库里存的时钟比，分三种情况：
+        <table style="margin-top:8px">
+          <tr><th style="width:34%">比较结果</th><th>怎么处理</th></tr>
+          <tr><td>新的比旧的更新</td><td>用新值刷新二级缓存，清掉一级缓存，更新版本记录</td></tr>
+          <tr><td>一样，或者更旧</td><td>丢掉，不重复处理（保证重投是幂等的）</td></tr>
+          <tr><td>两边互有大小（并发写）</td><td>逐字段比时间戳，谁的时间新用谁的；两边的时钟合并后存回版本表，并记一次冲突</td></tr>
+        </table>
+      </div>
+    </div>
+    <figcaption>实测延迟：选课后 617ms、外部直接改数据库 250ms、Canal 重启后退课 199ms。限制：消费端从队列最新位置开始读，应用启动之前的历史变更不会补刷；这个问题本来打算靠巡检引擎兜底，而巡检引擎没做。</figcaption>
+  </figure>
+
+  <!-- ============ 图 4 ============ -->
+  <h2>图 4　登录与请求鉴权</h2>
+  <figure>
+    <div class="stack">
+      <div class="box">登录 <code>POST /api/v1/auth/login</code><small>校验用户名密码（BCrypt），签发两个令牌</small></div>
+      <div class="arrow">↓</div>
+      <div class="row">
+        <div class="box">accessToken（JWT，30 分钟）<small>前端只放内存，不进 localStorage</small></div>
+        <div class="box">refreshToken（UUID，7 天）<small>存 Redis 白名单，前端放 localStorage</small></div>
+      </div>
+      <div class="arrow">↓ 后续请求带 <code>Authorization: Bearer &lt;accessToken&gt;</code></div>
+      <div class="box">网关 :8081<span class="tag">第一层</span><small>验签、查过期；剥掉外部伪造的 <code>X-Auth-*</code> 头，再注入可信的用户信息头；生成或沿用 traceId</small></div>
+      <div class="arrow">↓</div>
+      <div class="box">应用 :8080<span class="tag">第二层</span><small>再验一次签，并查登出黑名单；按角色判断这个接口能不能访问</small></div>
+      <div class="arrow">↓</div>
+      <div class="box">接口</div>
+    </div>
+    <figcaption>登出时 refreshToken 从白名单删除，accessToken 的 jti 进黑名单。选课一类接口的 studentId 一律取自令牌，不接受前端传，避免越权。<br>
+    网关不查黑名单（未实现），已登出的令牌仍能过网关，但会被应用层拒掉。分布式链路追踪也没做，现在只有 traceId 写在日志里，能按它串日志，但没有各段耗时。</figcaption>
+  </figure>
+
+  <!-- ============ 图 5 ============ -->
+  <h2>图 5　前端的页面与路由</h2>
+  <figure>
+    <div class="stack">
+      <div class="box">登录页 <code>/login</code></div>
+      <div class="arrow">↓ 按角色进入</div>
+      <div class="row">
+        <div class="box">
+          <b>学生端</b><span class="tag">STUDENT</span>
+          <small>
+            /student/courses　课程大厅<br>
+            /student/courses/:id　课程详情<br>
+            /student/me　我的选课<br>
+            /student/chat　对话助手
+          </small>
+        </div>
+        <div class="box">
+          <b>管理端</b><span class="tag">ADMIN</span>
+          <small>
+            /admin/dashboard　治理驾驶舱<br>
+            /admin/courses　课程管理<br>
+            /admin/demo　演示工具
+          </small>
+        </div>
+      </div>
+    </div>
+    <figcaption>两端共用一个布局组件 <code>AppLayout</code>：左侧菜单按角色渲染，顶栏放标题和用户菜单。前端按角色跳转只为了界面好用，权限以服务端为准。<br>
+    对话助手走流式返回：正文逐字追加，候选课程和冲突信息用 meta 事件单独送，选课要先点确认才执行。驾驶舱每 20 秒刷一次。</figcaption>
+  </figure>
+
+</main>
+</body>
+</html>
