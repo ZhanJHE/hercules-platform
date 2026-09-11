@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hercules 项目讲解 —— 结构设计与请求流程</title>
+<title>Hercules 项目讲解</title>
 <style>
   :root {
     --bg: #f5f7fa;
@@ -16,42 +16,78 @@
     --warn-line: #e8b98a;
     --warn-soft: #fff8f0;
     --code-bg: #f1f5f9;
+    --side-bg: #0f172a;
+    --side-text: #cbd5e1;
+    --side-active: #2563eb;
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html, body { height: 100%; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
     font: 16px/1.75 "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
   }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 40px 20px 96px; }
 
-  header { margin-bottom: 32px; }
-  h1 { font-size: 30px; line-height: 1.3; margin: 0 0 12px; letter-spacing: -.4px; }
-  .lede { font-size: 17px; color: var(--muted); margin: 0; }
+  /* ===== 左侧切换页栏 ===== */
+  .sidebar {
+    width: 236px;
+    flex: none;
+    background: var(--side-bg);
+    color: var(--side-text);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .brand {
+    padding: 18px 18px 14px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: .5px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .brand small { display: block; font-size: 12px; font-weight: 400; color: #8b93a7; margin-top: 2px; letter-spacing: 0; }
+  .nav { padding: 10px 0 24px; }
+  .nav-group { font-size: 12px; color: #6b7280; padding: 10px 18px 4px; letter-spacing: .08em; }
+  .nav a {
+    display: block;
+    padding: 7px 18px;
+    color: var(--side-text);
+    text-decoration: none;
+    font-size: 14px;
+    border-left: 3px solid transparent;
+  }
+  .nav a:hover { background: rgba(255,255,255,.05); color: #fff; }
+  .nav a.active { background: var(--side-active); color: #fff; border-left-color: #93c5fd; }
+  .nav a.sub { padding-left: 34px; font-size: 13px; color: #94a3b8; }
+  .nav a.sub.active { color: #fff; }
+
+  /* ===== 右侧可滚动讲解内容 ===== */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 36px 80px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  header { margin-bottom: 28px; }
+  h1 { font-size: 28px; line-height: 1.3; margin: 0 0 10px; letter-spacing: -.4px; }
+  .lede { font-size: 16px; color: var(--muted); margin: 0; }
   .lede b { color: var(--text); font-weight: 600; }
 
-  nav {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 16px 22px;
-    margin: 28px 0 40px;
-  }
-  nav h2 { font-size: 13px; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; border: 0; padding: 0; }
-  nav ol { margin: 0; padding-left: 20px; }
-  nav li { margin: 4px 0; }
-  nav a { color: var(--accent); text-decoration: none; }
-  nav a:hover { text-decoration: underline; }
+  .doclink { margin: 20px 0 0; }
+  .doclink a { color: var(--accent); }
 
-  section { margin-bottom: 52px; }
-  h2 {
-    font-size: 22px; margin: 0 0 6px; padding-bottom: 10px;
-    border-bottom: 2px solid var(--line-strong); letter-spacing: -.2px;
-  }
-  h3 { font-size: 17px; margin: 30px 0 10px; color: #0f172a; }
+  h2 { font-size: 22px; margin: 0 0 6px; padding-bottom: 10px; border-bottom: 2px solid var(--line-strong); letter-spacing: -.2px; }
+  h3 { font-size: 17px; margin: 28px 0 10px; color: #0f172a; }
   p { margin: 12px 0; }
   .sub { color: var(--muted); font-size: 14px; margin: -2px 0 16px; }
 
@@ -141,41 +177,102 @@
   .note.warn { border-left-color: var(--warn-line); background: var(--warn-soft); }
   .note b { font-weight: 600; }
 
+  .status-done { color: #15803d; font-weight: 600; }
+  .status-part { color: #b45309; font-weight: 600; }
+  .status-none { color: #b91c1c; font-weight: 600; }
+
   footer {
-    margin-top: 60px; padding-top: 18px;
+    margin-top: 48px; padding-top: 18px;
     border-top: 1px solid var(--line);
     color: var(--muted); font-size: 13.5px;
   }
-  @media (max-width: 600px) {
-    .wrap { padding: 24px 14px 64px; }
-    h1 { font-size: 24px; }
-    h2 { font-size: 19px; }
-    th, td { padding: 7px 9px; }
+
+  @media (max-width: 720px) {
+    body { flex-direction: column; overflow: auto; }
+    .sidebar { width: 100%; max-height: 40vh; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .content { padding: 20px 16px 60px; overflow: visible; }
   }
 </style>
 </head>
 <body>
+
+<aside class="sidebar">
+  <div class="brand">Hercules 项目讲解<small>智慧校园选课服务平台 · 2026-09-11</small></div>
+  <nav class="nav" id="nav">
+    <div class="nav-group">讲解</div>
+    <a href="#" data-page="overview">项目总览</a>
+    <a href="#" data-page="structure">结构设计与请求流程</a>
+    <a href="#" data-page="structure" data-anchor="s1" class="sub">一、整体分层</a>
+    <a href="#" data-page="structure" data-anchor="s2" class="sub">二、代码模块</a>
+    <a href="#" data-page="structure" data-anchor="s3" class="sub">三、数据存在哪里</a>
+    <a href="#" data-page="structure" data-anchor="s4" class="sub">四、请求一：查课程</a>
+    <a href="#" data-page="structure" data-anchor="s5" class="sub">五、请求二：选课</a>
+    <a href="#" data-page="structure" data-anchor="s6" class="sub">六、请求三：登录鉴权</a>
+    <a href="#" data-page="structure" data-anchor="s7" class="sub">七、请求四：对话选课</a>
+    <a href="#" data-page="structure" data-anchor="s8" class="sub">八、缓存怎么同步</a>
+    <a href="#" data-page="structure" data-anchor="s9" class="sub">九、哪些没做</a>
+    <div class="nav-group">开发文档</div>
+    <a href="#" data-page="roadmap">路线图</a>
+    <a href="#" data-page="packages">包结构说明</a>
+    <a href="#" data-page="design">设计说明</a>
+    <a href="#" data-page="tests">测试报告</a>
+    <a href="#" data-page="deploy">环境与部署</a>
+    <a href="#" data-page="worklog">工作日志</a>
+    <a href="#" data-page="baseline">历史基线归档</a>
+    <a href="#" data-page="agent">Agent 规范</a>
+  </nav>
+</aside>
+
+<main class="content">
 <div class="wrap">
 
-<header>
-  <h1>Hercules 项目讲解</h1>
-  <p class="lede">这个项目要解决的问题是：<b>课程数据被很多人在读，同时还被不断修改，缓存和数据库之间怎么保持一致。</b>下面先讲代码长什么样，再讲一个请求进来之后，一路都发生了什么。</p>
-</header>
+<!-- ================= 项目总览 ================= -->
+<section class="page" id="page-overview">
+  <header>
+    <h1>项目总览</h1>
+    <p class="lede">这个项目要解决的问题是：<b>课程数据被很多人在读，同时还被不断修改，缓存和数据库之间怎么保持一致</b>。下面从整体到细节讲这个项目。</p>
+  </header>
 
-<nav>
-  <h2>目录</h2>
-  <ol>
-    <li><a href="#s1">整体是怎么分层的</a></li>
-    <li><a href="#s2">代码分成哪些模块</a></li>
-    <li><a href="#s3">数据存在哪里</a></li>
-    <li><a href="#s4">请求一：查课程（读）</a></li>
-    <li><a href="#s5">请求二：选课（写）</a></li>
-    <li><a href="#s6">请求三：登录与鉴权</a></li>
-    <li><a href="#s7">请求四：用对话选课</a></li>
-    <li><a href="#s8">数据改了，缓存怎么跟着变</a></li>
-    <li><a href="#s9">哪些东西没做</a></li>
-  </ol>
-</nav>
+  <h3>技术栈</h3>
+  <div class="card">
+    <p>Java 21 · Spring Boot 3.5 · MyBatis-Plus · Caffeine + Redis · MySQL 8 · Vue 3 · Spring AI（智谱 GLM）· Docker Compose（十容器）</p>
+  </div>
+
+  <h3>现状</h3>
+  <table>
+    <thead><tr><th>部分</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td>多级缓存 + 向量时钟冲突消解</td><td class="status-done">已完成</td></tr>
+      <tr><td>Canal 监听 Binlog 同步缓存</td><td class="status-done">已完成</td></tr>
+      <tr><td>双 Token 认证、独立网关</td><td class="status-done">已完成</td></tr>
+      <tr><td>多智能体对话（推荐/排课/选课）</td><td class="status-part">基本完成；推荐理由的非结构化数据依据没做</td></tr>
+      <tr><td>Vue3 前端（学生端 + 管理端）</td><td class="status-done">已完成</td></tr>
+      <tr><td>容器部署、压测</td><td class="status-part">部署完成；压测数据口径已失效，需要重测</td></tr>
+      <tr><td>巡检引擎、RAG、eBPF 采集、分布式追踪、一致性健康度</td><td class="status-none">没做</td></tr>
+    </tbody>
+  </table>
+
+  <h3>测试</h3>
+  <p>后端 113 个用例、前端 17 个用例，全部通过（<code>mvn test</code>、<code>npm test</code>），不依赖本机中间件和网络。</p>
+
+  <h3>文档索引</h3>
+  <table>
+    <thead><tr><th>文档</th><th>里面是什么</th></tr></thead>
+    <tbody>
+      <tr><td><a href="路线图.md">路线图.md</a></td><td>每条需求做了没有，没做的差在哪</td></tr>
+      <tr><td><a href="包结构说明.md">包结构说明.md</a></td><td>每个包和类干什么，缓存键有哪些，页面和路由怎么分</td></tr>
+      <tr><td><a href="设计说明.md">设计说明.md</a></td><td>认证、日志、前端的设计取舍，以及和原设计不一致的地方</td></tr>
+      <tr><td><a href="环境配置与部署.md">环境配置与部署.md</a></td><td>本机和容器怎么装、怎么起、出错了怎么办</td></tr>
+      <tr><td><a href="测试报告-2026-09-11.md">测试报告-2026-09-11.md</a></td><td>跑了哪些测试、结果是多少</td></tr>
+      <tr><td><a href="工作日志.md">工作日志.md</a></td><td>哪天做了什么、踩了哪些坑</td></tr>
+      <tr><td><a href="历史基线归档.md">历史基线归档.md</a></td><td>开工时写的规划和需求（只读）</td></tr>
+      <tr><td><a href="../Agent.md">Agent.md（仓库根目录）</a></td><td>Agent 操作项目必须遵守的规范</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= 结构设计与请求流程 ================= -->
+<section class="page" id="page-structure">
 
 <section id="s1">
   <h2>一、整体是怎么分层的</h2>
@@ -461,10 +558,376 @@
   </table>
 </section>
 
+<p class="doclink">完整内容：<a href="包结构说明.md">包结构说明.md</a>（每个类干什么）</p>
+</section>
+
+<!-- ================= 路线图 ================= -->
+<section class="page" id="page-roadmap">
+  <header>
+    <h1>路线图</h1>
+    <p class="lede">每条需求做了没有、做到什么程度、没做的差在哪。判断依据是代码，不是设计文档。状态分三种：<span class="status-done">已完成</span>、<span class="status-part">部分完成</span>、<span class="status-none">未实现</span>。</p>
+  </header>
+
+  <h3>多智能体（FR-MA）</h3>
+  <table>
+    <thead><tr><th>编号</th><th>需求</th><th>状态</th><th>差在哪</th></tr></thead>
+    <tbody>
+      <tr><td>FR-MA-01</td><td>自然语言对话界面</td><td class="status-done">已完成</td><td></td></tr>
+      <tr><td>FR-MA-02</td><td>识别意图，分发给对应智能体</td><td class="status-done">已完成</td><td>先用关键词规则判断，判断不出来才调大模型</td></tr>
+      <tr><td>FR-MA-03</td><td>推荐理由基于非结构化数据</td><td class="status-part">部分完成</td><td>推荐理由由大模型生成，但喂给它的只有结构化字段；课程大纲、评价没有采集也没有检索（RAG 没做）</td></tr>
+      <tr><td>FR-MA-04</td><td>检测时间冲突与先修课约束</td><td class="status-done">已完成</td><td>纯规则计算，不调大模型</td></tr>
+      <tr><td>FR-MA-05</td><td>用户确认后调用选课接口</td><td class="status-done">已完成</td><td>只有学生角色能执行</td></tr>
+      <tr><td>FR-MA-06</td><td>记录每次协作的完整调用链</td><td class="status-part">部分完成</td><td>推荐、排课、执行写 t_agent_trace；意图路由不写。耗时 2026-09-11 改成真实测量</td></tr>
+    </tbody>
+  </table>
+
+  <h3>缓存一致性（FR-HC）</h3>
+  <table>
+    <thead><tr><th>编号</th><th>需求</th><th>状态</th><th>差在哪</th></tr></thead>
+    <tbody>
+      <tr><td>FR-HC-01</td><td>Caffeine 本地缓存 + Redis 分布式缓存</td><td class="status-done">已完成</td><td></td></tr>
+      <tr><td>FR-HC-02</td><td>Canal 监听 Binlog 异步更新 Redis</td><td class="status-done">已完成</td><td>容器部署走真实 Binlog；本机直跑用进程内事件总线；一个开关切换</td></tr>
+      <tr><td>FR-HC-03</td><td>向量时钟冲突检测与合并</td><td class="status-done">已完成</td><td></td></tr>
+      <tr><td>FR-HC-04</td><td>定时巡检缓存与数据库一致性</td><td class="status-none">未实现</td><td>hercules-inspector 是空模块。没做导致三个已知问题无兜底：启动前变更不补刷、Canal 位点回放缓存抖动、不一致无检测</td></tr>
+      <tr><td>FR-HC-05</td><td>自动生成补偿 SQL 修复</td><td class="status-none">未实现</td><td>t_repair_log 表建了，没有代码用它</td></tr>
+    </tbody>
+  </table>
+
+  <h3>可观测性（FR-OB）</h3>
+  <table>
+    <thead><tr><th>编号</th><th>需求</th><th>状态</th><th>差在哪</th></tr></thead>
+    <tbody>
+      <tr><td>FR-OB-01</td><td>eBPF 无侵入采集指标</td><td class="status-none">未实现</td><td>实际是 Micrometer 手工埋点 + Prometheus；原计划的 Grafana Beyla 没做</td></tr>
+      <tr><td>FR-OB-02</td><td>全链路分布式追踪</td><td class="status-none">未实现</td><td>只有 traceId 写日志，没有 span 和各段耗时拆解</td></tr>
+      <tr><td>FR-OB-03</td><td>Grafana 大盘</td><td class="status-part">部分完成</td><td>8 个面板有 QPS、延迟、缓存命中率；健康度没有</td></tr>
+      <tr><td>FR-OB-04</td><td>一致性健康度评分</td><td class="status-none">未实现</td><td></td></tr>
+      <tr><td>FR-OB-05</td><td>关键指标异常告警</td><td class="status-none">未实现</td><td></td></tr>
+    </tbody>
+  </table>
+
+  <h3>非功能需求</h3>
+  <table>
+    <thead><tr><th>类别</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>性能：500 并发 P95 &lt; 500ms</td><td class="status-part">需要重测</td><td>现有数据是 2026-09-07 测的，之后口径变了（唯一键、Canal 异步、智能体、前端）</td></tr>
+      <tr><td>可用性：单节点故障不影响整体</td><td class="status-part">部分完成</td><td>Redis 挂掉降级做过演练；应用单实例部署，无多节点验证</td></tr>
+      <tr><td>一致性：不一致窗口 &lt; 2 秒</td><td class="status-done">已完成</td><td>实测：选课 617ms、直改库 250ms、Canal 重启后退课 199ms</td></tr>
+      <tr><td>可扩展性：新增智能体不重启</td><td class="status-none">未实现</td><td>四个智能体写死在编排器构造函数里</td></tr>
+      <tr><td>安全性：未授权返回 401</td><td class="status-done">已完成</td><td>会话级越权 2026-09-11 已修</td></tr>
+    </tbody>
+  </table>
+
+  <h3>三个创新点的实际情况</h3>
+  <table>
+    <thead><tr><th>创新点</th><th>原计划</th><th>实际做的</th></tr></thead>
+    <tbody>
+      <tr><td>多智能体协作</td><td>Spring AI Alibaba</td><td>Spring AI 1.0.6 接智谱 GLM；四个智能体由编排器按顺序调用，不是互相协作</td></tr>
+      <tr><td>向量时钟冲突消解</td><td>向量时钟解决并发写覆盖</td><td>按计划做了</td></tr>
+      <tr><td>eBPF 零侵扰可观测</td><td>eBPF 采集</td><td>没做，用 Micrometer 手工埋点</td></tr>
+    </tbody>
+  </table>
+
+  <h3>下一步建议（按投入产出排）</h3>
+  <ol>
+    <li>重新做一次压测（必做）。旧口径已失效；写路径应改用 st001~st060 多账号，否则选课唯一键下大量 409，压不到防超选和并发冲突。</li>
+    <li>补巡检引擎（FR-HC-04/05），给已知问题兜底。</li>
+    <li>补可观测性（FR-OB-02/04），一致性健康度评分最便宜。</li>
+    <li>给 eBPF 一个结论（FR-OB-01）：要么在 WSL2 跑起 Beyla，要么承认没做、改掉创新点摘要。</li>
+    <li>RAG（FR-MA-03 依赖它）。时间不够可只做向量检索。</li>
+  </ol>
+
+  <p class="doclink">完整内容：<a href="路线图.md">路线图.md</a></p>
+</section>
+
+<!-- ================= 包结构说明 ================= -->
+<section class="page" id="page-packages">
+  <header>
+    <h1>包结构说明</h1>
+    <p class="lede">代码按职责拆成模块，模块内按包分。网关和前端是独立进程，不参与 Maven 依赖。</p>
+  </header>
+
+  <h3>模块职责</h3>
+  <table>
+    <thead><tr><th>模块</th><th>职责</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td><code>hercules-common</code></td><td>实体、异常、JSON 工具、CacheKeys、Mapper、JwtUtil</td><td>已完成</td></tr>
+      <tr><td><code>hercules-cache</code></td><td>两级缓存主逻辑、TTL 策略、熔断、单飞、分布式回源锁、命中统计</td><td>已完成</td></tr>
+      <tr><td><code>hercules-sync</code></td><td>向量时钟、版本消息生产/消费、字段级 LWW 合并、Binlog 转换与 RocketMQ 监听</td><td>已完成</td></tr>
+      <tr><td><code>hercules-agent</code></td><td>路由/推荐/排课/执行四个智能体、编排器、port 接口、trace 落库</td><td>已完成</td></tr>
+      <tr><td><code>hercules-gateway</code></td><td>独立进程：JWT 验签、剥伪造头、注入透传头、traceId</td><td>已完成</td></tr>
+      <tr><td><code>hercules-application</code></td><td>唯一可启动模块：Controller、Service、安全、对话入口、种子数据</td><td>已完成</td></tr>
+      <tr><td><code>hercules-inspector / rag / observability / admin</code></td><td>巡检、RAG、可观测、管控台</td><td>空模块</td></tr>
+      <tr><td><code>hercules-ui</code></td><td>Vue 3 前端（npm 工程）</td><td>已完成</td></tr>
+    </tbody>
+  </table>
+
+  <h3>改代码要守的几条</h3>
+  <div class="card">
+    <p>· 依赖方向不可反向：<code>common ← cache ← sync ← agent ← application</code>。<code>agent</code> 不依赖 <code>application</code>，需要的能力在 <code>port/</code> 声明接口，由 <code>AgentPortAdapter</code> 实现。</p>
+    <p>· 缓存键不手拼字符串，统一走 <code>common.CacheKeys</code>。键格式、TTL、语义见《包结构说明.md》第四节。</p>
+    <p>· 新增配置项要三处齐：属性类（setter 里校验，非法值拒绝启动）、<code>application.yml</code>（默认值 + 中文注释）、影响使用方式则更新部署文档。</p>
+    <p style="margin-bottom:0">· 注释用中文：类头 Javadoc 写清职责、线程安全性、已知边界，带 <code>@author</code>/<code>@since</code>。</p>
+  </div>
+
+  <p class="doclink">完整内容：<a href="包结构说明.md">包结构说明.md</a></p>
+</section>
+
+<!-- ================= 设计说明 ================= -->
+<section class="page" id="page-design">
+  <header>
+    <h1>设计说明</h1>
+    <p class="lede">认证、日志、前端三块功能的设计取舍，以及与原设计不一致的地方。</p>
+  </header>
+
+  <h3>认证：双 Token 机制</h3>
+  <table>
+    <thead><tr><th>Token</th><th>形态</th><th>有效期</th><th>存放</th></tr></thead>
+    <tbody>
+      <tr><td>Access Token</td><td>JWT（HS256）</td><td>30 分钟</td><td>前端内存（不落 localStorage）</td></tr>
+      <tr><td>Refresh Token</td><td>UUID（无业务语义）</td><td>7 天</td><td>服务端 Redis 白名单，旋转式：换新即删旧</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>Access 有效期短，泄露风险可控；Refresh 存在服务端，可随时强制失效。</li>
+    <li>网关验签、剥掉伪造的 <code>X-Auth-*</code> 头、注入可信用户头；应用二次校验并查黑名单。黑名单仍在应用层，网关层查询未实现。</li>
+    <li>前端 401 时单飞静默刷新（同一时刻只发一次刷新请求），刷新也失效才跳登录页。</li>
+  </ul>
+
+  <h3>日志</h3>
+  <ul>
+    <li>logback 滚动文件 + UTF-8；traceId 由网关生成、经请求头传给应用、写进 MDC，可按 traceId 串起两端日志。</li>
+    <li>认证审计独立落盘（<code>auth-audit.log</code>）；敏感信息有写入红线。</li>
+  </ul>
+
+  <h3>前端</h3>
+  <ul>
+    <li>布局：左侧可折叠功能菜单（按角色渲染学生/管理两套菜单）+ 顶栏，双 Layout 合并为单一 <code>AppLayout</code>。</li>
+    <li>组件三级复用：Layout → 领域业务组件 → 通用 UI 组件；状态按领域分片（课程/选课/监控/认证/对话），组件不直接改 store state。</li>
+    <li>对话用 SSE 流式返回，边生成边显示；候选课程用 meta 事件渲染成卡片。</li>
+  </ul>
+
+  <p class="doclink">完整内容：<a href="设计说明.md">设计说明.md</a></p>
+</section>
+
+<!-- ================= 测试报告 ================= -->
+<section class="page" id="page-tests">
+  <header>
+    <h1>测试报告</h1>
+    <p class="lede">自动化测试与真机/容器实测数据。文件名带日期，日期是最后一次更新的日期。</p>
+  </header>
+
+  <h3>自动化用例</h3>
+  <table>
+    <thead><tr><th>阶段</th><th>后端用例数</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>认证后</td><td>46 → 53</td><td>AuthFlowTest 6 例 + 冒烟 401</td></tr>
+      <tr><td>遗留清理后</td><td>53 → 67</td><td>缓存键、配置校验、重复选课 409、分页边界等</td></tr>
+      <tr><td>阶段 B 后</td><td>67 → 79</td><td>Binlog 转换与 RocketMQ 监听</td></tr>
+      <tr><td>阶段 D 后</td><td>79 → 96</td><td>智能体 13 例 + 应用 +4</td></tr>
+      <tr><td>修复轮后</td><td>96 → 108 → 113</td><td>安全与缺陷修复轮、试运行回归修正</td></tr>
+    </tbody>
+  </table>
+  <p>前端 Vitest 17 例全绿。测试不依赖外部中间件（H2 内存库 + 内存桩）和网络（调大模型处注入 StubLlmPort）。</p>
+
+  <h3>缓存一致性实测（十容器栈）</h3>
+  <table>
+    <thead><tr><th>场景</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>选课后详情缓存同步</td><td>617ms（&lt; 1s 验收线）</td></tr>
+      <tr><td>外部直接改数据库 → 缓存同步</td><td>250ms（完全绕开应用）</td></tr>
+      <tr><td>Canal 重启后退课同步</td><td>199ms；位点持久化无重放、无虚假冲突</td></tr>
+    </tbody>
+  </table>
+
+  <h3>压测（2026-09-07 旧口径，需重测）</h3>
+  <table>
+    <thead><tr><th>并发</th><th>吞吐</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>100</td><td>4,051 req/s</td><td>0 错</td></tr>
+      <tr><td>300</td><td>4,630 req/s</td><td>0 错</td></tr>
+      <tr><td>500</td><td>5,027 req/s</td><td>3,018,549 请求，20 错（0.0007%）</td></tr>
+    </tbody>
+  </table>
+  <p>之后发生三件改变口径的事：加选课唯一键、写路径改 Canal 异步、加智能体与前端。老数字引用前必须重测。连接池 20→40 的 A/B 对比有效：写吞吐 +86%、写延迟近减半、连接超时清零。</p>
+
+  <h3>故障演练</h3>
+  <ul>
+    <li>Redis 挂掉：读路径首请求 3.4s 代价 → 熔断 OPEN 后 7-8ms 直接查库；恢复后半开探测成功转 CLOSED。</li>
+    <li>GLM 无效 Key：1s 降级为结构化候选列表，对话不断链。</li>
+  </ul>
+
+  <p class="doclink">完整内容：<a href="测试报告-2026-09-11.md">测试报告-2026-09-11.md</a></p>
+</section>
+
+<!-- ================= 环境与部署 ================= -->
+<section class="page" id="page-deploy">
+  <header>
+    <h1>环境与部署</h1>
+    <p class="lede">两种跑法：本机直装（开发基线）和 WSL2 + Docker Compose（十容器栈，当前生效）。</p>
+  </header>
+
+  <h3>本机直跑（最少依赖）</h3>
+  <div class="card">
+    <p>需要 JDK 21+、MySQL 8、Redis。先配好 <code>hercules-application/src/main/resources/application-local.yml</code>（本机数据库账号，模板见《环境配置与部署.md》§1.3）。</p>
+    <p><code>.\mvnw.cmd test</code> 跑测试（H2 内存库，不依赖本机 MySQL/Redis）。<code>mvnw.cmd</code> 需要 PATH 里有 Windows PowerShell；没有就改用 <code>mvn -f pom.xml test</code>。</p>
+    <p style="margin-bottom:0">打包启动：<code>.\mvnw.cmd package -DskipTests</code>，再 <code>java -jar hercules-application\target\hercules-application-0.1.0-SNAPSHOT.jar</code>。启动成功标志：<code>GET http://127.0.0.1:8080/actuator/health</code> 返回 <code>UP</code>。也可以双击根目录 <code>start.bat</code>：打包、启动、查健康、开浏览器。</p>
+  </div>
+
+  <h3>容器（完整形态，十个容器）</h3>
+  <div class="card">
+    <p>需要 Docker Desktop。会起 MySQL、Redis、应用、网关、前端、Prometheus、Grafana、RocketMQ、Canal。</p>
+    <p><code>cd hercules-platform/deploy; docker compose up -d --build</code>，浏览器入口 <code>http://localhost:8090</code>。</p>
+    <p style="margin-bottom:0">演示账号：<code>admin/admin123</code>、<code>st001</code>~<code>st003/123456</code>（启动时自动创建；压测部署可调到 60 个账号）。</p>
+  </div>
+
+  <div class="note warn">
+    敏感配置都走忽略文件：<code>deploy/.env</code> 提供 <code>GLM_API_KEY</code> 和 <code>HERCULES_AUTH_SECRET</code>，<code>application-local.yml</code> 提供本机凭据，都不入库。
+  </div>
+
+  <p class="doclink">完整内容：<a href="环境配置与部署.md">环境配置与部署.md</a></p>
+</section>
+
+<!-- ================= 工作日志 ================= -->
+<section class="page" id="page-worklog">
+  <header>
+    <h1>工作日志</h1>
+    <p class="lede">按时间的过程记录与踩坑。过去的条目不改，新增写末尾。</p>
+  </header>
+
+  <h3>时间线</h3>
+  <table>
+    <thead><tr><th>日期</th><th>做了什么</th></tr></thead>
+    <tbody>
+      <tr><td>2026-09-02</td><td>开工：MVP 基线（缓存一致性纵向切片）、单模块重构为 Maven 多模块、全量中文 Javadoc 工程</td></tr>
+      <tr><td>2026-09-05</td><td>阶段 A+：全链路超时传递、Redis 熔断降级、击穿两级防护；认证系统落地（双 Token）；决策记录：放弃 Docker（后来反转）</td></tr>
+      <tr><td>2026-09-07</td><td>决策反转 + WSL2/Docker 部署与最小网关（H-1~H-3）；日志设计实施；阶段 H-4：JMeter 500 并发阶梯压测与 JVM 调优 A/B；仓库更名 hercules-platform</td></tr>
+      <tr><td>2026-09-09</td><td>遗留事项清理：重复选课唯一键、分页边界、500 收敛、版本表乐观锁、配置校验</td></tr>
+      <tr><td>2026-09-10</td><td>阶段 B：真实 Binlog 同步链（Canal 1.1.7 + RocketMQ 4.9.4）；阶段 C 跳过；阶段 D：多智能体对话（Spring AI + GLM）；阶段 G：Vue3 双端前端</td></tr>
+      <tr><td>2026-09-11</td><td>代码复核与安全加固轮：会话越权归属校验、前端 403 自愈、Dockerfile-ui 构建修复、压测读端门禁；文档收敛为 8 份</td></tr>
+    </tbody>
+  </table>
+
+  <h3>几条典型的坑</h3>
+  <ul>
+    <li>压测残留 514,844 行选课记录拖垮智能体链 → 清理 + 补唯一键 + 按有效记录校准 enrolled。</li>
+    <li>SSE 异步转发与 Security 冲突（ASYNC dispatch 重跑过滤器链）→ 限定 <code>dispatcher-types=request,error</code>。</li>
+    <li>GLM thinking 吃满 max_tokens 致正文为空 → 1024 提到 4096 + 编排器空响应自动补发候选列表；LLM 超时 30s 误杀正常生成 → 放宽 90s。</li>
+    <li>Docker Hub 直连阻断 → 按约定停下报告，用户选镜像加速前缀方案（daocloud）。</li>
+    <li>canal 投递 NPE（<code>partitionsNum</code> 拆箱）→ 显式配置 <code>canal.mq.partitionsNum=8</code>。</li>
+    <li><code>.bat</code> 内嵌中文被 cmd 按字节错位 → 逻辑迁入 ps1、壳保持纯 ASCII；write 工具产 LF，批处理显式转 CRLF。</li>
+  </ul>
+
+  <p class="doclink">完整内容：<a href="工作日志.md">工作日志.md</a></p>
+</section>
+
+<!-- ================= 历史基线归档 ================= -->
+<section class="page" id="page-baseline">
+  <header>
+    <h1>历史基线归档</h1>
+    <p class="lede">2026-09-02 开工时写的规划：需求分析、架构设计、技术选型、数据库设计、12 周迭代计划、风险识别、论文结构建议。<b>已经过时，只读不改。</b></p>
+  </header>
+
+  <h3>原来打算做什么</h3>
+  <div class="card">
+    <p><b>智慧校园多智能体服务平台</b>：面向高校选课场景，底层由分布式缓存一致性治理平台提供高并发支撑，上层由多智能体系统提供智能决策，全链路零侵扰可观测。</p>
+    <p style="margin-bottom:0">核心目标：意图识别准确率 ≥ 90%、不一致窗口 &lt; 2 秒、缓存命中率 ≥ 95%、500 并发稳定运行、核心操作 100% 可追踪。</p>
+  </div>
+
+  <h3>已经知道和实现不一致的地方</h3>
+  <ul>
+    <li>eBPF 零侵扰可观测性（原第 3 创新点）没做，用的是 Micrometer 手工埋点。</li>
+    <li>智能体用的是 Spring AI，不是原计划的 Spring AI Alibaba。</li>
+    <li>巡检引擎（FR-HC-04/05）和 RAG 都没做。</li>
+    <li>12 周迭代计划里 Sprint 4、6、7 的内容没完成。</li>
+  </ul>
+
+  <div class="note">
+    这份文件还有两个用途：第 9 章的风险表、第 10 章的论文结构建议。现在的情况看《路线图.md》。
+  </div>
+
+  <p class="doclink">完整内容：<a href="历史基线归档.md">历史基线归档.md</a></p>
+</section>
+
+<!-- ================= Agent 规范 ================= -->
+<section class="page" id="page-agent">
+  <header>
+    <h1>Agent 规范</h1>
+    <p class="lede">仓库根目录的 <a href="../Agent.md">Agent.md</a> 是默认情况下的规范文档，一切 Agent 操作必须遵循。这里是要点摘要。</p>
+  </header>
+
+  <h3>约束与规范</h3>
+  <ul>
+    <li>禁止未经允许修改规范文档；修改必须先向用户确认。</li>
+    <li>回答不用表情符号、不用修辞美化，直白、严谨、正式、简洁；不用打分制评价方案。</li>
+    <li>复杂计算必须用计算脚本；遇到环境/网络问题停下询问用户，禁止反复盲目测试。</li>
+    <li>修改工作目录以外的外部环境（依赖、运行环境、系统设置）前必须确认。</li>
+    <li>每个新 Agent/子代理必须先导入此文档进入上下文。</li>
+  </ul>
+
+  <h3>文档、版本控制、前端、工作流</h3>
+  <ul>
+    <li>开发文档统一中文、存放在 <code>开发文档/</code>；日期统一 YYYY-MM-DD；默认生成《项目讲解.html》（左侧页栏，每页对应一份文档）。</li>
+    <li>默认 Git + 三段式版本号，按路线图/修复更新；默认不传 GitHub；敏感信息（API-Key、密钥、密码、个人信息）不入库；大文件单独存储；提交信息简洁。</li>
+    <li>前端默认两种模板：方案一左侧页栏（流程驱动）、方案二上侧页栏。</li>
+    <li>工作流：计划 → 编码 → 测试 → 文档与 Git → 找问题/下一步，阶段之间汇报并由用户确认。</li>
+    <li>一键运行脚本命名 <code>start.sh</code> 或 <code>start.cmd</code>（本项目为 <code>start.bat</code> + <code>start-hercules.ps1</code>）。</li>
+  </ul>
+
+  <h3>本项目专属细则（由原《开发文档/Agent规范.md》并入）</h3>
+  <ul>
+    <li>动手前先读：README.md、路线图.md、包结构说明.md；动认证/日志/前端再看设计说明.md。</li>
+    <li>依赖方向 <code>common ← cache ← sync ← agent ← application</code> 不可反向；agent 经 port 接口反转。</li>
+    <li>缓存键统一走 <code>CacheKeys</code>；新增配置项三处齐；注释用中文，类头 Javadoc 带 <code>@author</code>/<code>@since</code>。</li>
+    <li>表结构改动须在《环境配置与部署.md》补存量库升级 SQL（<code>schema.sql</code> 的 CREATE IF NOT EXISTS 对存量库不生效）。</li>
+    <li>测试纪律：不依赖外部中间件和网络（H2 + StubLlmPort）；改功能必须在同一提交更新《路线图》。</li>
+    <li>提交格式「类型: 主题——要点」（feat/fix/docs/chore/refactor）；提交前跑全量测试；不提交 target、node_modules、dist、loadtest 产物、logs。</li>
+    <li>回答项目所有者：说结果不罗列过程；数字给出处；文档与代码不一致直接指出、以代码为准；区分环境限制与代码问题。</li>
+  </ul>
+
+  <p class="doclink">完整内容：<a href="../Agent.md">Agent.md（仓库根目录）</a></p>
+</section>
+
 <footer>
   <p>内容以代码为准，最后核对：2026-09-11。逐条需求的完成情况见《路线图.md》，每个类的细节见《包结构说明.md》，设计和取舍见《设计说明.md》。</p>
 </footer>
 
 </div>
+</main>
+
+<script>
+(function () {
+  var links = document.querySelectorAll('.nav a');
+  var pages = document.querySelectorAll('.page');
+  var content = document.querySelector('.content');
+
+  function show(pageId, anchor) {
+    var target = document.getElementById('page-' + pageId);
+    pages.forEach(function (p) { p.classList.toggle('active', p === target); });
+    links.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('data-page') === pageId && !a.getAttribute('data-anchor'));
+      if (a.getAttribute('data-anchor')) {
+        a.classList.toggle('active', a.getAttribute('data-anchor') === anchor && pageId === 'structure');
+      }
+    });
+    content.scrollTop = 0;
+    if (anchor) {
+      var el = document.getElementById(anchor);
+      if (el) {
+        var top = el.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop;
+        setTimeout(function () { content.scrollTop = top - 16; }, 0);
+      }
+    }
+  }
+
+  links.forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      show(a.getAttribute('data-page'), a.getAttribute('data-anchor'));
+    });
+  });
+
+  show('overview');
+})();
+</script>
 </body>
 </html>
