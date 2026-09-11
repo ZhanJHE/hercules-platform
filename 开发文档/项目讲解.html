@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hercules 项目讲解 —— 结构设计与请求流程</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --line: #e3e8ef;
+    --line-strong: #cbd5e1;
+    --text: #1f2933;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --warn-line: #e8b98a;
+    --warn-soft: #fff8f0;
+    --code-bg: #f1f5f9;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.75 "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 40px 20px 96px; }
+
+  header { margin-bottom: 32px; }
+  h1 { font-size: 30px; line-height: 1.3; margin: 0 0 12px; letter-spacing: -.4px; }
+  .lede { font-size: 17px; color: var(--muted); margin: 0; }
+  .lede b { color: var(--text); font-weight: 600; }
+
+  nav {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 22px;
+    margin: 28px 0 40px;
+  }
+  nav h2 { font-size: 13px; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; border: 0; padding: 0; }
+  nav ol { margin: 0; padding-left: 20px; }
+  nav li { margin: 4px 0; }
+  nav a { color: var(--accent); text-decoration: none; }
+  nav a:hover { text-decoration: underline; }
+
+  section { margin-bottom: 52px; }
+  h2 {
+    font-size: 22px; margin: 0 0 6px; padding-bottom: 10px;
+    border-bottom: 2px solid var(--line-strong); letter-spacing: -.2px;
+  }
+  h3 { font-size: 17px; margin: 30px 0 10px; color: #0f172a; }
+  p { margin: 12px 0; }
+  .sub { color: var(--muted); font-size: 14px; margin: -2px 0 16px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin: 16px 0;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+  }
+  .card > :first-child { margin-top: 0; }
+  .card > :last-child { margin-bottom: 0; }
+
+  code {
+    background: var(--code-bg);
+    border-radius: 4px;
+    padding: 1.5px 6px;
+    font: 13.5px/1.5 "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    color: #0f172a;
+  }
+  .path { font-weight: 600; color: #1e40af; }
+
+  .steps { list-style: none; margin: 14px 0; padding: 0; counter-reset: step; }
+  .steps > li {
+    position: relative;
+    padding: 0 0 16px 40px;
+    counter-increment: step;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 1px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .steps > li::after {
+    content: ""; position: absolute; left: 13px; top: 30px; bottom: 2px;
+    width: 1px; background: var(--line-strong);
+  }
+  .steps > li:last-child { padding-bottom: 0; }
+  .steps > li:last-child::after { display: none; }
+  .steps > li b { font-weight: 600; }
+  .steps > li .detail { display: block; color: var(--muted); font-size: 14.5px; margin-top: 3px; }
+
+  .layer {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 10px 0;
+  }
+  .layer h4 { margin: 0 0 10px; font-size: 14px; color: var(--accent); letter-spacing: .02em; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .node {
+    background: #fbfdff;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 10px 13px;
+    font-size: 14.5px;
+  }
+  .node b { display: block; font-weight: 600; }
+  .node span { display: block; color: var(--muted); font-size: 13px; margin-top: 3px; line-height: 1.5; }
+  .node.off { background: var(--warn-soft); border-color: var(--warn-line); }
+  .node.off b::after {
+    content: "未实现"; float: right; font-size: 11px; font-weight: 500;
+    color: #9a5b16; background: #fdebd7; border-radius: 9px; padding: 1px 7px;
+  }
+  .arrow { text-align: center; color: var(--line-strong); font-size: 15px; margin: 2px 0; }
+
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14.5px; background: var(--card); }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: #f8fafc; font-weight: 600; white-space: nowrap; }
+  tbody tr:nth-child(even) td { background: #fcfdfe; }
+
+  .note {
+    border-left: 4px solid var(--line-strong);
+    background: #f8fafc;
+    padding: 12px 18px;
+    border-radius: 0 8px 8px 0;
+    color: #334155;
+    font-size: 14.5px;
+    margin: 16px 0;
+  }
+  .note.warn { border-left-color: var(--warn-line); background: var(--warn-soft); }
+  .note b { font-weight: 600; }
+
+  footer {
+    margin-top: 60px; padding-top: 18px;
+    border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 13.5px;
+  }
+  @media (max-width: 600px) {
+    .wrap { padding: 24px 14px 64px; }
+    h1 { font-size: 24px; }
+    h2 { font-size: 19px; }
+    th, td { padding: 7px 9px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Hercules 项目讲解</h1>
+  <p class="lede">这个项目要解决的问题是：<b>课程数据被很多人在读，同时还被不断修改，缓存和数据库之间怎么保持一致。</b>下面先讲代码长什么样，再讲一个请求进来之后，一路都发生了什么。</p>
+</header>
+
+<nav>
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s1">整体是怎么分层的</a></li>
+    <li><a href="#s2">代码分成哪些模块</a></li>
+    <li><a href="#s3">数据存在哪里</a></li>
+    <li><a href="#s4">请求一：查课程（读）</a></li>
+    <li><a href="#s5">请求二：选课（写）</a></li>
+    <li><a href="#s6">请求三：登录与鉴权</a></li>
+    <li><a href="#s7">请求四：用对话选课</a></li>
+    <li><a href="#s8">数据改了，缓存怎么跟着变</a></li>
+    <li><a href="#s9">哪些东西没做</a></li>
+  </ol>
+</nav>
+
+<section id="s1">
+  <h2>一、整体是怎么分层的</h2>
+  <p class="sub">从上到下四层。每一层只干自己的事，越往下越靠近数据。</p>
+
+  <div class="layer">
+    <h4>第一层　接入</h4>
+    <div class="grid">
+      <div class="node"><b>浏览器</b><span>Vue 3 前端，学生端和管理端共用一个布局</span></div>
+      <div class="node"><b>网关 :8081</b><span>验签、注入用户信息、生成 traceId</span></div>
+    </div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="layer">
+    <h4>第二层　应用</h4>
+    <div class="grid">
+      <div class="node"><b>hercules-application :8080</b><span>所有对外的接口、安全配置、对话入口</span></div>
+      <div class="node"><b>hercules-agent</b><span>四个智能体，需要时会调智谱大模型</span></div>
+    </div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="layer">
+    <h4>第三层　一致性处理</h4>
+    <div class="grid">
+      <div class="node"><b>hercules-cache</b><span>两级缓存、熔断、防止同时回源</span></div>
+      <div class="node"><b>hercules-sync</b><span>给变更打版本号、判断新旧、合并冲突</span></div>
+      <div class="node off"><b>hercules-inspector</b><span>巡检与自愈</span></div>
+    </div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="layer">
+    <h4>第四层　存储</h4>
+    <div class="grid">
+      <div class="node"><b>MySQL 8</b><span>业务数据，开着 Row 格式的 Binlog</span></div>
+      <div class="node"><b>Redis</b><span>二级缓存，以及令牌的白名单和黑名单</span></div>
+      <div class="node off"><b>Milvus + Neo4j</b><span>做 RAG 检索用</span></div>
+    </div>
+  </div>
+
+  <div class="note">
+    这一层结构里，<code>hercules-agent</code> 不直接依赖 <code>hercules-application</code>。它需要什么业务能力，就在自己的 <code>port/</code> 包里声明接口，由应用层实现。这样依赖方向是单向的，不会绕成死循环。
+  </div>
+</section>
+
+<section id="s2">
+  <h2>二、代码分成哪些模块</h2>
+  <p class="sub">一个 Maven 工程，按职责拆成多个模块。前端是独立的 npm 工程，不参与 Java 依赖。</p>
+
+  <table>
+    <thead>
+      <tr><th>模块</th><th>里面是什么</th><th>状态</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>hercules-common</code></td><td>实体、异常、JSON 工具、缓存键的拼法、Mapper</td><td>已完成</td></tr>
+      <tr><td><code>hercules-cache</code></td><td>两级缓存的主逻辑、过期时间策略、熔断、防止击穿</td><td>已完成</td></tr>
+      <tr><td><code>hercules-sync</code></td><td>向量时钟、版本消息的生产与消费、字段级合并、Binlog 消费</td><td>已完成</td></tr>
+      <tr><td><code>hercules-agent</code></td><td>路由、推荐、排课、执行四个智能体和编排器</td><td>已完成</td></tr>
+      <tr><td><code>hercules-gateway</code></td><td>独立进程的网关，只有验签和透传几个类</td><td>已完成</td></tr>
+      <tr><td><code>hercules-application</code></td><td>唯一能启动的模块：接口、安全、对话、种子数据</td><td>已完成</td></tr>
+      <tr><td><code>hercules-inspector</code></td><td>巡检与自愈</td><td>空模块</td></tr>
+      <tr><td><code>hercules-rag</code></td><td>检索课程大纲、评价这类文字资料</td><td>空模块</td></tr>
+      <tr><td><code>hercules-observability</code></td><td>可观测性聚合</td><td>空模块</td></tr>
+      <tr><td><code>hercules-admin</code></td><td>管控台后端</td><td>空模块</td></tr>
+      <tr><td><code>hercules-ui</code></td><td>Vue 3 前端</td><td>已完成</td></tr>
+      <tr><td><code>loadtest</code></td><td>JMeter 压测工程</td><td>已完成</td></tr>
+      <tr><td><code>deploy</code></td><td>十个容器的编排和配置</td><td>已完成</td></tr>
+    </tbody>
+  </table>
+
+  <h3>依赖方向</h3>
+  <div class="card">
+    <p><code>common</code> ← <code>cache</code> ← <code>sync</code> ← <code>agent</code> ← <code>application</code></p>
+    <p class="sub" style="margin-bottom:0">箭头从右往左。左边的模块不知道右边的模块存在。网关和前端是独立进程，只通过 HTTP 打交道。</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2>三、数据存在哪里</h2>
+
+  <h3>MySQL 的表</h3>
+  <table>
+    <thead><tr><th>表</th><th>存什么</th></tr></thead>
+    <tbody>
+      <tr><td><code>t_course</code></td><td>课程。容量 <code>capacity</code> 和已选人数 <code>enrolled</code> 是防超选的关键；上课时间和先修课用 JSON 文本列存</td></tr>
+      <tr><td><code>t_enrollment</code></td><td>选课记录。<code>(student_id, course_id)</code> 上有唯一键，同一个学生同一门课只能有一行；<code>status</code> 为 2 表示已退选</td></tr>
+      <tr><td><code>t_user</code></td><td>用户。密码用 BCrypt 存，角色是学生或管理员</td></tr>
+      <tr><td><code>t_cache_version</code></td><td>每个缓存键当前的最新版本号（向量时钟），用来判断新旧</td></tr>
+      <tr><td><code>t_agent_trace</code></td><td>智能体每次干活都写一条：用的哪个模型、花了多少毫秒、成功还是失败</td></tr>
+      <tr><td><code>t_repair_log</code></td><td>表建了，没有代码用它（巡检没做）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Redis 里存什么</h3>
+  <table>
+    <thead><tr><th>键</th><th>过期时间</th><th>存什么</th></tr></thead>
+    <tbody>
+      <tr><td><code>course:{id}</code></td><td>300 秒</td><td>课程详情。这个键参与后面的版本机制</td></tr>
+      <tr><td><code>course:list:{页}:{条数}:{关键字}</code></td><td>10 秒</td><td>课程列表。不进版本机制，靠 10 秒过期兜底</td></tr>
+      <tr><td><code>auth:refresh:{uuid}</code></td><td>7 天</td><td>刷新令牌的白名单，用一次换一次</td></tr>
+      <tr><td><code>auth:blacklist:{jti}</code></td><td>等于 accessToken 剩余有效时间</td><td>登出黑名单</td></tr>
+      <tr><td>回源锁</td><td>3 秒</td><td>防止多个实例同时查数据库</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    进程内还有一级缓存（Caffeine），不落盘、不共享。详情键活 60 秒，列表键活 10 秒。
+  </div>
+</section>
+
+<section id="s4">
+  <h2>四、请求一：查课程（读）</h2>
+  <p class="sub">接口 <code class="path">GET /api/v1/courses?page=1&amp;size=10</code>。调用链是 <code>CourseController.list</code> → <code>CourseService.list</code>。</p>
+
+  <ol class="steps">
+    <li><b>网关先看这个请求能不能进</b>
+      <span class="detail">验签、看令牌过没过期，然后把用户信息塞进请求头，交给应用。</span></li>
+    <li><b>应用再验一次，然后按角色判断权限</b>
+      <span class="detail">课程查询只要登录就行，不需要管理员。</span></li>
+    <li><b>拼出缓存键</b>
+      <span class="detail"><code>CacheKeys.courseList(page, size, keyword)</code>。关键字会先去掉首尾空格并转成小写，所以 "Java" 和 "java" 是同一个键。</span></li>
+    <li><b>查一级缓存（进程内的 Caffeine）</b>
+      <span class="detail">命中就直接返回，数据库一个字节都不用碰。列表键活 10 秒。</span></li>
+    <li><b>没命中，查二级缓存（Redis）</b>
+      <span class="detail">命中就返回，顺手把结果塞回一级缓存，下次更快。</span></li>
+    <li><b>还没有，才去查数据库</b>
+      <span class="detail">这里有两道闸：先看有没有别的线程正在查同一个键（有就等它的结果，不重复查），再抢一把 Redis 上的分布式锁（防止另一个实例也在查）。抢不到锁就每 50 毫秒瞄一眼二级缓存，最多等 2 秒；还等不到就自己查——宁可多查一次，也不能让请求一直卡着。</span></li>
+    <li><b>查到结果，往两级缓存回填，然后返回</b>
+      <span class="detail">先写 Redis，再写本地缓存。查不到（课程不存在）就不缓存，直接返回空，由接口返回 404。</span></li>
+  </ol>
+
+  <div class="note">
+    <b>Redis 挂掉会怎样？</b>熔断器打开，直接跳过二级缓存去查数据库，请求不会被拖住。等 Redis 恢复，熔断器半开探测成功后再自动恢复使用。
+  </div>
+</section>
+
+<section id="s5">
+  <h2>五、请求二：选课（写）</h2>
+  <p class="sub">接口 <code class="path">POST /api/v1/enrollment</code>，请求体只有 <code>courseId</code>。谁在选课不由前端说了算，而是从令牌里取。</p>
+
+  <ol class="steps">
+    <li><b>从令牌里取学号，并且必须是学生</b>
+      <span class="detail"><code>EnrollmentService.requireStudentId</code>。前端传什么都不作数，避免学生改个参数就能替别人选课。</span></li>
+    <li><b>先看有没有重复选课</b>
+      <span class="detail">已经选过、状态是已选的，直接返回 409，不往下走。</span></li>
+    <li><b>用一条带条件的更新语句扣人数</b>
+      <span class="detail">关键就在这条语句：<br><code>UPDATE t_course SET enrolled = enrolled + 1 WHERE id = ? AND enrolled &lt; capacity</code><br>课程已经满了，这条语句就影响 0 行，接口返回 409。<b>判断有没有超员和扣人数是同一条语句完成的，中间没有空隙</b>，所以并发点也不会超选。</span></li>
+    <li><b>写选课记录</b>
+      <span class="detail">如果这个学生以前退过这门课，就把原来那行改回已选（复活），而不是新插一行；否则新插一行。两种冲突都由数据库的唯一键兜底，撞上了还是返回 409。</span></li>
+    <li><b>事务提交</b>
+      <span class="detail">到这一步数据库里才算真的改了。</span></li>
+    <li><b>提交之后，才发一条「数据变了」的消息</b>
+      <span class="detail">顺序很重要：<b>先提交、后同步</b>。如果事务回滚了，消息根本不会发出去，缓存也就不会变成错的值。这一步由 <code>@TransactionalEventListener</code> 挂在提交事件上完成。</span></li>
+    <li><b>消息被消费者接住，去刷新缓存</b>
+      <span class="detail">消费者拿新版本和数据库里存的旧版本比，决定是用新值刷新、还是丢掉、还是合并。这段见第八节。</span></li>
+  </ol>
+
+  <div class="note warn">
+    <b>消息有两条路，由配置项 <code>hercules.sync.transport</code> 决定：</b>
+    <br>· <code>in-process</code>（本机跑和测试用）：上面第 6 步直接在本进程里发事件。
+    <br>· <code>canal-mq</code>（容器部署用）：业务代码在第 5 步就结束了，<b>不再发消息、也不再重读数据库</b>。刷新的触发源变成 MySQL 的 Binlog：Canal 读到变更 → 投给 RocketMQ → 应用消费。好处是写请求更快，而且<b>别人绕开应用直接改数据库，缓存也会跟着更新</b>（实测 250 毫秒）。
+  </div>
+</section>
+
+<section id="s6">
+  <h2>六、请求三：登录与鉴权</h2>
+  <p class="sub">登录发两个令牌，一个管当前操作，一个管续期。之后每个请求都要带着第一个。</p>
+
+  <h3>登录时发生了什么</h3>
+  <ol class="steps">
+    <li><b>查用户，用 BCrypt 比对密码</b>
+      <span class="detail"><code>AuthController.login</code>。密码在数据库里是加密存的，比对的是哈希，不是原文。</span></li>
+    <li><b>签发两个令牌</b>
+      <span class="detail"><code>accessToken</code> 是一个 JWT，30 分钟有效，里面写着用户是谁、什么角色；<code>refreshToken</code> 是一个随机字符串，7 天有效。</span></li>
+    <li><b>把 refreshToken 记进 Redis 白名单</b>
+      <span class="detail">只有在这个白名单里的刷新令牌才认。用一次就换成新的、旧的作废，所以刷新令牌即使被偷也只能用一次。</span></li>
+  </ol>
+
+  <h3>之后每个请求怎么鉴权</h3>
+  <div class="card">
+    <p><b>前端</b>：accessToken 只放在内存里，不写 localStorage（减少被脚本偷走的机会）；refreshToken 放 localStorage。页面刷新后靠 401 自动静默续期一次，续不上就跳登录页。</p>
+    <p><b>网关</b>：验签、看过期；把客户端伪造的 <code>X-Auth-*</code> 请求头先删掉，再注入可信的用户信息，然后转发。<span class="sub">（网关这里不查登出黑名单）</span></p>
+    <p><b>应用</b>：再验一次签，并且查黑名单，然后按角色判断这个路径能不能访问。拒绝时统一返回 401 或 403 的 JSON。</p>
+    <p style="margin-bottom:0"><b>登出</b>：refreshToken 从白名单删掉，accessToken 的身份标识进黑名单，剩下的有效期内也不能再用。</p>
+  </div>
+</section>
+
+<section id="s7">
+  <h2>七、请求四：用对话选课</h2>
+  <p class="sub">接口 <code class="path">POST /api/v1/chat</code>，返回的不是普通 JSON，而是流式一段一段推回来，前端边收边显示。</p>
+
+  <ol class="steps">
+    <li><b>先确认这个会话是你自己的</b>
+      <span class="detail">会话号第一次使用时就和当前用户绑定。别人猜到你的会话号也用不了，会返回 403——否则就能偷看你的聊天记录、甚至替你确认选课。</span></li>
+    <li><b>判断你想干什么</b>
+      <span class="detail"><code>RoutingAgent</code> 先用关键词判断：说「确认」是确认，说「帮我选」是选课，其他都当推荐。关键词判断不出来时才去问大模型；大模型那边出问题就退回按推荐处理，不会卡住。</span></li>
+    <li><b>走对应的链</b>
+      <span class="detail">
+        · <b>推荐</b>：<code>RecommendationAgent</code> 先查出候选课程，逐门标出和时间冲突、先修课不满足的情况，再让大模型写一段推荐理由，边生成边推给前端。<br>
+        · <b>选课</b>：<code>SchedulingAgent</code> 只用规则算——上课时间有没有重叠、先修课选了没有、学分一共多少。<b>这一段完全不问大模型</b>，所以计算是 0 秒、结果是确定的。
+      </span></li>
+    <li><b>选课不直接执行，先要你确认</b>
+      <span class="detail">校验通过后只是把「待选课程」记在会话里，回一句「请回复确认」。你说确认之后，<code>ExecutionAgent</code> 才真正去调用选课逻辑，而且再查一次是不是学生。<b>大模型没有直接写数据库的权限</b>，所有写操作都走和普通选课完全一样的路径，防超选那套保护照样生效。</span></li>
+    <li><b>边推边记，最后收尾</b>
+      <span class="detail">正文用 <code>token</code> 事件一段段推；候选课程和冲突信息用 <code>meta</code> 事件单独发，前端拿它渲染成卡片和按钮；每一步都往 <code>t_agent_trace</code> 写一条记录（用了哪个模型、耗时多少、成功没有）。</span></li>
+  </ol>
+
+  <div class="note warn">
+    <b>大模型挂了会怎样？</b>不会出报错页。问答会退化成一份结构化的候选课程列表，用户照样能看到有什么课、点按钮自己选。实测从发起请求到拿到降级结果是 1 秒。
+  </div>
+</section>
+
+<section id="s8">
+  <h2>八、数据改了，缓存怎么跟着变</h2>
+  <p class="sub">这是整个项目的核心。要解决两件事：缓存怎么自动更新；两个节点同时改同一条数据时，谁说了算。</p>
+
+  <h3>第一步：给每次变更打一个版本号</h3>
+  <p>每次数据变更，都生成一条带版本号的消息。这个版本号叫<b>向量时钟</b>，样子是一个小表，比如 <code>{"node-1": 3, "node-sim": 1}</code>，意思是「node-1 这个节点改过 3 次，node-sim 改过 1 次」。生成规则是：读出数据库里存的旧时钟，然后把自己这一项加一。</p>
+
+  <h3>第二步：消费者拿新旧版本比一比</h3>
+  <p>比较结果只有三种，处理方式各不相同：</p>
+  <table>
+    <thead><tr><th style="width:34%">比较结果</th><th>说明与处理</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>新的比旧的更新</td>
+        <td>正常情况。用新值刷新二级缓存、清掉一级缓存、把新版本号存进版本表。</td>
+      </tr>
+      <tr>
+        <td>一样，或者更旧</td>
+        <td>说明这条消息是重复投递或者迟到的。直接丢掉，不重复处理——消息中间件保证不了只投一次，靠这一步做到重复投递也没关系。</td>
+      </tr>
+      <tr>
+        <td>两边互有大小</td>
+        <td>说明两个节点各改各的，谁都没看到对方的修改，这叫并发冲突。这时不能简单用新的覆盖旧的，那会丢掉另一边的改动。做法是<b>逐字段比时间戳</b>：同一个字段谁的时间新用谁的，两边各自独有的字段都保留。最后把两边的版本号合并成一个存回去，并给这次冲突记一笔。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>为什么不能只看时间戳？</b>因为不同机器的时钟可能对不齐，光比时间戳会误判。向量时钟比的是「改动之间的因果关系」——只有当一方确实看过另一方的改动、并在它基础上继续改，才叫更新；两边互相没看过，就叫并发。
+  </div>
+
+  <h3>第三步：列表数据为什么不跟着一起变</h3>
+  <p>课程列表没有被纳入这套版本机制。原因是列表的组合太多了（不同页码、不同关键字都是不同的键），逐个失效成本很高。所以列表只给 10 秒过期时间：选课之后，最迟 10 秒后列表里的已选人数就会变成新的。</p>
+</section>
+
+<section id="s9">
+  <h2>九、哪些东西没做</h2>
+  <p class="sub">下面这些在开工文档里写了，但代码里确实没有。写论文和答辩时不要当成已完成。</p>
+
+  <table>
+    <thead><tr><th>没做的</th><th>影响</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>巡检引擎</b>（<code>hercules-inspector</code> 是空模块）</td>
+        <td>缓存和数据库万一真出现不一致，没有检测手段；另外消费者是从消息队列最新位置开始读的，应用启动之前发生的数据变更不会被补刷。这两件事本来都指望它兜底。</td>
+      </tr>
+      <tr>
+        <td><b>eBPF 采集</b></td>
+        <td>原计划用 Grafana Beyla 不改代码就采到指标，实际用的是 Micrometer 手工埋点。这一条在开工文档里标的是 P0。</td>
+      </tr>
+      <tr>
+        <td><b>分布式链路追踪</b></td>
+        <td>现在只有一个 traceId 写在日志里，能按它把同一个请求的日志串起来，但没有各段耗时拆解，算不上链路追踪。</td>
+      </tr>
+      <tr>
+        <td><b>一致性健康度评分</b></td>
+        <td>没有这个指标，监控大盘上看不到「缓存和数据库现在有多一致」。</td>
+      </tr>
+      <tr>
+        <td><b>RAG 检索</b>（<code>hercules-rag</code> 是空模块）</td>
+        <td>推荐理由只能基于课程名、学分、老师、上课时间这些结构化字段，用不上课程大纲、评价这类文字资料。</td>
+      </tr>
+      <tr>
+        <td><b>压测结论要重测</b></td>
+        <td>现有性能数字是 2026-09-07 测的。之后加了选课唯一键、把写路径改成 Binlog 异步、加了智能体和前端，口径已经变了，老数字不能直接引用。</td>
+      </tr>
+      <tr>
+        <td>智能体动态注册、队列积压监控、多节点部署验证</td>
+        <td>四个智能体是写死在编排器里的；消息队列有没有积压看不到；应用是单实例部署，没做过某个节点挂掉的验证。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <p>内容以代码为准，最后核对：2026-09-11。逐条需求的完成情况见《路线图.md》，每个类的细节见《包结构说明.md》，设计和取舍见《设计说明.md》。</p>
+</footer>
+
+</div>
+</body>
+</html>
