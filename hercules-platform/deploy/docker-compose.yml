@@ -44,7 +44,7 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root123
       SPRING_DATA_REDIS_HOST: redis
-      HERCULES_AUTH_SECRET: ***REDACTED-JWT-SECRET***
+      HERCULES_AUTH_SECRET: ${HERCULES_AUTH_SECRET:?HERCULES_AUTH_SECRET missing (deploy/.env)}
       HERCULES_AUTH_DEMO_STUDENT_COUNT: "60"     # 压测登录账号池 st001~st060
       HERCULES_LOADTEST_SEED: "true"             # 启动时播种 5000 门压测课程
       HERCULES_LOADTEST_COURSE_COUNT: "5000"
@@ -86,7 +86,7 @@ services:
     container_name: hercules-gateway
     environment:
       APP_URI: http://app:8080
-      HERCULES_AUTH_SECRET: ***REDACTED-JWT-SECRET***
+      HERCULES_AUTH_SECRET: ${HERCULES_AUTH_SECRET:?HERCULES_AUTH_SECRET missing (deploy/.env)}
       # 轻量网关：默认自适应 Xmx4G 纯属浪费，显式收小（阶段H-4调研）
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m -XX:+AlwaysPreTouch -Xlog:gc*:file=/app/logs/gc.log:time,uptime:filecount=3,filesize=10m"
     depends_on:
