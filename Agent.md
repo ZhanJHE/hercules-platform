@@ -36,3 +36,17 @@
 6. 编码规范
 - 默认编写一键运行的脚本方便用户运行测试，命名为[start.sh]或[start.cmd]。
 - 遵守所用语言的标准的代码和注释规范
+
+7. 项目专属细则（Hercules 项目，由原《开发文档/Agent规范.md》并入）
+- 动手之前先读三份：根目录 README.md、开发文档/路线图.md、开发文档/包结构说明.md；要动认证、日志、前端时再看开发文档/设计说明.md，要装环境或排错看开发文档/环境配置与部署.md。
+- 依赖方向不可反向：common ← cache ← sync ← agent ← application。hercules-agent 不能依赖 hercules-application，它需要什么业务能力就在 port/ 下声明接口（现有 CourseQueryPort、EnrollmentPort），由 application 侧的 AgentPortAdapter 实现；hercules-gateway 和 hercules-ui 是独立进程/工程，不参与 Maven 依赖。
+- 缓存键不要手拼字符串，统一走 common.CacheKeys。键的格式、TTL 和语义写在开发文档/包结构说明.md 第四节。
+- 新增配置项要三处齐：属性类里加字段和 getter/setter，setter 里做校验（非法值直接抛异常拒绝启动）；hercules-application/src/main/resources/application.yml 里加默认值并写中文注释；如果影响使用方式，更新开发文档/环境配置与部署.md。
+- 注释用中文，跟现有风格：类头 Javadoc 写清楚这个类是干什么的、线程安全性、已知边界，字段和方法用一句话说明，带 @author / @since；不要写空话。
+- 数据库表结构改动要写升级步骤：schema.sql 用的是 CREATE TABLE IF NOT EXISTS，对已有的库不生效。加了唯一键或列之后，要在开发文档/环境配置与部署.md 第一节的"存量库升级"里补上可直接执行的 SQL。
+- 测试：后端 cd hercules-platform 后 .\mvnw.cmd test（113 例），前端 cd hercules-ui 后 npm test（17 例）和 npx vue-tsc -b；不依赖外部中间件（H2 内存库加内存桩）和网络（调大模型的地方注入 StubLlmPort，真实 GLM 只在容器端到端验证时用）；受限沙箱下 surefire 分叉 JVM 会被拒，用 MAVEN_OPTS=-Djdk.attach.allowAttachSelf=true 加 mvn -B -f pom.xml test -DforkCount=0 可在单 JVM 跑通；新增用例要同步更新测试报告里的数量。
+- 文档铁律：改功能必须在同一个提交里更新开发文档/路线图.md；文件名用中文（README.md 是仓库首页的平台限制例外）；文件名带日期的文档（如测试报告）日期是最后更新日期，改了要同步所有指向它的链接；架构图和流程图用开发文档/项目讲解.html 维护，不引入需要联网才能显示的库，这个文件要能离线打开；文档分工见原文件表格，别在一份里塞两件事。
+- 工作日志：过去的条目不要重写，新增条目写在文件末尾。
+- 历史基线归档.md 只读，不要改它，也不要"顺手修正"它。
+- 提交规则：提交信息用中文，格式是"类型: 主题——要点"，类型沿用现有习惯：feat: 新功能、fix: 修缺陷、docs: 只改文档、chore: 清理/配置/杂项、refactor: 重构行为不变；提交前跑全量测试（后端加前端）；不要提交 target/、node_modules/、dist/、loadtest 的运行时和报告产物，以及 logs/；工作区保持干净，不留调试临时文件。
+- 回答项目所有者时的规则：说结果，不要罗列过程，做了就说做了，没做就说没做，不要用"基本完成"掩盖缺口；数字要给出来源（哪个文件、哪一节）；发现文档和代码不一致，直接指出来，并说明以代码为准；沙箱或环境导致的失败，要说明是环境限制还是代码问题，不要混在一起说。
